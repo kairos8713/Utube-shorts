@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>/USR/CHANNELS_MANAGER</h2>
+</div>
+
+<div class="alert alert-info" style="border-color: var(--neon-cyan); color: var(--neon-cyan);">
+    <i class="fas fa-terminal"></i> <strong>SYSTEM_HINT:</strong><br>
+    1. Google Cloud Console JSON dosyasını sürükleyip bırak.<br>
+    2. Kanal Alias ve Sektör seç.<br>
+    3. Kaydettikten sonra <strong>BRANDING</strong> sütunundan tüm kimlik parametrelerini ayarla.
+</div>
+
+<div class="row">
+    <div class="col-md-5">
+        <div class="card-stat p-4 mb-4">
+            <h5 style="color: var(--neon-pink); margin-bottom: 20px;">[ CREATE_SECTOR_PROTOCOL ]</h5>
+            <form action="{{ url_for('main.add_sector') }}" method="POST">
+                <div class="mb-3">
+                    <label class="form-label text-muted small">SECTOR_NAME</label>
+                    <input type="text" name="sector_name" class="form-control" placeholder="Örn: Minecraft Parkour" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted small">TITLE_TEMPLATE</label>
+                    <input type="text" name="title_template" class="form-control" placeholder="{title} #shorts">
+                    <small style="color:#666; font-size:0.7rem;">* {title} = Orijinal video başlığı</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted small">HASHTAGS (Virgülle ayrılmış)</label>
+                    <input type="text" name="hashtags" class="form-control" placeholder="minecraft, gaming, parkour">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted small">DESCRIPTION_TEMPLATE</label>
+                    <textarea name="description_template" class="form-control" rows="3"
+                        placeholder="Subscribe for more!&#10;#shorts #viral"
+                        style="background-color: #000; color: var(--matrix-green); border: 1px solid var(--matrix-green); font-family: 'VT323', monospace; resize: vertical;"></textarea>
+                </div>
+                <button type="submit" class="btn btn-danger w-100">
+                    <i class="fas fa-plus"></i> INITIATE_SECTOR
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <div class="card-stat p-4 mb-4">
+            <h5 style="color: var(--neon-green); margin-bottom: 20px;">[ NEW_CHANNEL_NODE ]</h5>
+            <form method="POST" enctype="multipart/form-data" class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label text-muted small">CHANNEL_ALIAS (İsim)</label>
+                    <input type="text" name="channel_name" class="form-control" placeholder="Örn: Ana Kanal 1" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label text-muted small">TARGET_SECTOR</label>
+                    <select name="sector_id" class="form-control"
+                        style="background-color:#000; color:var(--neon-cyan); border:1px solid var(--matrix-green);">
+                        {% for sec in sectors %}
+                        <option value="{{ sec['id'] }}">{{ sec['name'] }}</option>
+                        {% else %}
+                        <option value="1">Default (General)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label text-muted small">EMAIL</label>
+                    <input type="text" name="mail" class="form-control" placeholder="user@gmail.com" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label text-muted small">PASSWORD</label>
+                    <input type="text" name="password" class="form-control" placeholder="password" required>
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label text-muted small">AUTH_FILE (Session JSON - Optional)</label>
+                    <input type="file" name="json_file" class="form-control" accept=".json">
+                    <small style="color:#666; font-size:0.7rem;">Not: get_session_file.py ile sonradan üretebilirsiniz</small>
+                </div>
+                <div class="col-12 text-end">
+                    <button type="submit" class="btn btn-success w-100 mt-3">
+                        <i class="fas fa-upload"></i> UPLOAD_AND_INITIALIZE
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
+   BRANDING & IDENTITY MODAL  —  modal-lg, dark terminal theme
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="modal fade" id="identityModal" tabindex="-1" aria-hidden="true" style="backdrop-filter:blur(6px);">
+    <div class="modal-dialog modal-lg" style="max-width:780px;">
+        <div class="modal-content" style="background:#080808; border:1px solid var(--neon-pink); border-radius:0;">
+
+            {# ── Header ── #}
+            <div class="modal-header" style="border-bottom:1px dashed #1a1a1a; padding:14px 20px;">
+                <div>
+                    <h6 style="color:var(--neon-pink); font-family:'VT323',monospace; font-size:1.25rem; margin:0;">
+                        <i class="fas fa-id-badge"></i> &nbsp;BRANDING &amp; IDENTITY CONFIG
+                    </h6>
+                    <small id="modalChannelLabel" style="color:#444; font-family:'VT323',monospace; font-size:0.9rem;"></small>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" style="filter:invert(1);"></button>
+            </div>
+
+            {# ── Body ── #}
+            <div class="modal-body" style="font-family:'VT323',monospace; padding:20px 24px;">
+                <input type="hidden" id="identityChannelId">
+
+                {# ─── ROW 1: VOICE + SFX ─── #}
+                <div style="border:1px dashed #1e1e1e; padding:14px 16px; margin-bottom:16px;">
+                    <div style="color:#444; font-size:0.75rem; margin-bottom:10px; letter-spacing:2px;">
+                        ── VOICE &amp; AUDIO ───────────────────────────────────
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">VOICE_ID <span style="color:#444;">(Kokoro TTS)</span></label>
+                            <input id="identityVoiceId" type="text" class="form-control"
+                                placeholder="af_sky"
+                                style="background:#000; color:var(--neon-cyan); border:1px solid #1e3a1e; font-family:'VT323',monospace; font-size:1.1rem;">
+                            <small style="color:#444; font-size:0.68rem;">
+                                af_sky · af_heart · am_adam · bf_emma · bm_lewis
+                            </small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">SFX_SET <span style="color:#444;">(sfx_transitions/ subfolder)</span></label>
+                            <select id="identitySfxSet" class="form-control"
+                                style="background:#000; color:var(--neon-cyan); border:1px solid #1e3a1e; font-family:'VT323',monospace; font-size:1.1rem;">
+                                <option value="default">default</option>
+                                <option value="dark">dark</option>
+                                <option value="cinematic">cinematic</option>
+                                <option value="glitch">glitch</option>
+                                <option value="none">none (disabled)</option>
+                            </select>
+                            <small style="color:#444; font-size:0.68rem;">Maps to sfx_transitions/{set}/ folder</small>
+                        </div>
+                    </div>
+                </div>
+
+                {# ─── ROW 2: AI PERSONA + FONT ─── #}
+                <div style="border:1px dashed #1e1e1e; padding:14px 16px; margin-bottom:16px;">
+                    <div style="color:#444; font-size:0.75rem; margin-bottom:10px; letter-spacing:2px;">
+                        ── AI PERSONA &amp; FONT ─────────────────────────────
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">PERSONA <span style="color:#444;">(Qwen AI tone)</span></label>
+                            <select id="identityPersona" class="form-control"
+                                style="background:#000; color:var(--neon-pink); border:1px solid #2a0a2a; font-family:'VT323',monospace; font-size:1.1rem;">
+                                <option value="Analytical Expert">Analytical Expert</option>
+                                <option value="Act as a Skeptical Intelligence Analyst">Skeptical Analyst</option>
+                                <option value="Act as an Aggressive Financial Strategist who exposes hidden agendas">Aggressive Strategist</option>
+                                <option value="Act as a Hype-Driven Sports Commentator who makes everything sound epic">Hype Commentator</option>
+                                <option value="Act as a Chill but Sharp Tech Reviewer who speaks truth to power">Chill Tech Reviewer</option>
+                                <option value="Act as a Controversial Political Commentator who challenges mainstream narratives">Controversial Commentator</option>
+                                <option value="Act as a Ruthless Business Coach who reveals what corporations hide">Ruthless Business Coach</option>
+                            </select>
+                            <small style="color:#444; font-size:0.68rem;">Injected into Qwen system prompt for every clip</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">FONT_STYLE <span style="color:#444;">(TextClip font)</span></label>
+                            <select id="identityFontStyle" class="form-control"
+                                style="background:#000; color:var(--neon-cyan); border:1px solid #1e3a1e; font-family:'VT323',monospace; font-size:1.1rem;"
+                                onchange="updateFontPreview(this.value)">
+                                <option value="Impact">Impact</option>
+                                <option value="Roboto">Roboto</option>
+                                <option value="Montserrat">Montserrat</option>
+                                <option value="Oswald">Oswald</option>
+                                <option value="Bebas Neue">Bebas Neue</option>
+                                <option value="Arial">Arial</option>
+                            </select>
+                            {# Live font preview #}
+                            <div id="fontPreviewBox"
+                                style="margin-top:6px; padding:8px 12px; background:#0d0d0d;
+                                       border-left:3px solid var(--neon-cyan);
+                                       font-size:1.1rem; font-weight:700; color:#fff;
+                                       font-family:'Impact',sans-serif; letter-spacing:1px;
+                                       transition:font-family 0.2s;">
+                                THE SECRET REVEALED
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# ─── ROW 3: ACCENT COLORS ─── #}
+                <div style="border:1px dashed #1e1e1e; padding:14px 16px; margin-bottom:16px;">
+                    <div style="color:#444; font-size:0.75rem; margin-bottom:10px; letter-spacing:2px;">
+                        ── ACCENT COLORS ────────────────────────────────────
+                    </div>
+                    <div class="row g-3">
+                        {# Accent 1 #}
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">
+                                ACCENT_COLOR_1 <span style="color:#444;">(Banner border + progress bar)</span>
+                            </label>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <input id="accent1Picker" type="color" value="#1E90FF"
+                                    style="width:44px; height:36px; border:none; background:none; cursor:pointer; padding:0; flex-shrink:0;">
+                                <input id="identityAccent1" type="text" class="form-control"
+                                    placeholder="#1E90FF"
+                                    style="background:#000; color:var(--neon-cyan); border:1px solid #1e3a1e; font-family:'VT323',monospace; font-size:1.1rem;">
+                            </div>
+                            <div id="accent1Preview" style="margin-top:6px; height:4px; background:#1E90FF; width:100%;"></div>
+                        </div>
+                        {# Accent 2 #}
+                        <div class="col-md-6">
+                            <label class="form-label text-muted small">
+                                ACCENT_COLOR_2 <span style="color:#444;">(Secondary accent)</span>
+                            </label>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <input id="accent2Picker" type="color" value="#FF6D00"
+                                    style="width:44px; height:36px; border:none; background:none; cursor:pointer; padding:0; flex-shrink:0;">
+                                <input id="identityAccent2" type="text" class="form-control"
+                                    placeholder="#FF6D00"
+                                    style="background:#000; color:var(--neon-orange); border:1px solid #2a1a00; font-family:'VT323',monospace; font-size:1.1rem;">
+                            </div>
+                            <div id="accent2Preview" style="margin-top:6px; height:4px; background:#FF6D00; width:100%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                {# ─── ROW 4: THEME COLOR (Legacy subscribe button) ─── #}
+                <div style="border:1px dashed #1e1e1e; padding:14px 16px; margin-bottom:16px;">
+                    <div style="color:#444; font-size:0.75rem; margin-bottom:10px; letter-spacing:2px;">
+                        ── LEGACY SUBSCRIBE BUTTON ──────────────────────────
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">
+                            THEME_COLOR <span style="color:#444;">(Subscribe button background)</span>
+                        </label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input id="identityColorPicker" type="color" value="#FF0000"
+                                style="width:44px; height:36px; border:none; background:none; cursor:pointer; padding:0; flex-shrink:0;">
+                            <input id="identityThemeColor" type="text" class="form-control"
+                                placeholder="#FF0000"
+                                style="background:#000; color:var(--neon-cyan); border:1px solid #1e3a1e; font-family:'VT323',monospace; font-size:1.1rem;">
+                        </div>
+                    </div>
+                </div>
+
+                {# Status line #}
+                <div id="identityStatus" style="min-height:22px; font-size:0.88rem; color:#555; font-family:'VT323',monospace;"></div>
+            </div>
+
+            {# ── Footer ── #}
+            <div class="modal-footer" style="border-top:1px dashed #1a1a1a; padding:12px 20px;">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"
+                    style="font-family:'VT323',monospace; font-size:1rem;">CANCEL</button>
+                <button type="button" class="btn btn-sm btn-success" onclick="saveChannelIdentity()"
+                    style="font-family:'VT323',monospace; font-size:1rem; border-color:var(--neon-green); color:var(--neon-green);">
+                    <i class="fas fa-save"></i> &nbsp;SAVE_IDENTITY
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ═══════════════════════════════════════════════════════════════
+   CHANNELS TABLE
+   ═══════════════════════════════════════════════════════════════ #}
+<div class="card-stat p-4">
+    <h4 style="margin-top:0; border:none; color: var(--neon-cyan);">>> ACTIVE_NODES_LIST</h4>
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>ALIAS</th>
+                    <th>SECTOR</th>
+                    <th>BRANDING</th>
+                    <th>TOKEN</th>
+                    <th>ACTION</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ch in channels %}
+                <tr>
+                    <td style="color:#555;">#{{ ch['id'] }}</td>
+                    <td style="font-weight:bold; color:white;">{{ ch['name'] or 'Unnamed' }}</td>
+                    <td>
+                        <span class="badge" style="border-color: var(--neon-pink); color: var(--neon-pink);">
+                            {{ ch['sector_name'] or 'General' }}
+                        </span>
+                    </td>
+                    {# ── Branding identity cell ─────────────────────────── #}
+                    <td>
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            {# Accent 1 swatch #}
+                            <span title="Accent 1: {{ ch['accent_color_1'] }}"
+                                style="display:inline-block; width:12px; height:12px; border-radius:2px;
+                                       background:{{ ch['accent_color_1'] }}; border:1px solid #333;
+                                       flex-shrink:0;"></span>
+                            {# Accent 2 swatch #}
+                            <span title="Accent 2: {{ ch['accent_color_2'] }}"
+                                style="display:inline-block; width:12px; height:12px; border-radius:2px;
+                                       background:{{ ch['accent_color_2'] }}; border:1px solid #333;
+                                       flex-shrink:0;"></span>
+                            <span style="color:var(--neon-cyan); font-size:0.72rem; font-family:'VT323',monospace;">
+                                {{ ch['voice_id'] }}
+                            </span>
+                            <span style="color:var(--neon-pink); font-size:0.68rem; font-family:'VT323',monospace;
+                                         border:1px solid #2a0a2a; padding:0 4px; white-space:nowrap;">
+                                {{ ch['persona'][:18] }}…
+                            </span>
+                            <button class="btn btn-sm"
+                                style="font-size:0.6rem; padding:1px 6px; border:1px solid var(--neon-pink); color:var(--neon-pink);"
+                                onclick="openIdentityModal(
+                                    {{ ch['id'] }},
+                                    '{{ ch['voice_id'] }}',
+                                    '{{ ch['theme_color'] }}',
+                                    '{{ ch['persona']|replace("'","\\'")|e }}',
+                                    '{{ ch['font_style'] }}',
+                                    '{{ ch['accent_color_1'] }}',
+                                    '{{ ch['accent_color_2'] }}',
+                                    '{{ ch['sfx_set'] }}'
+                                )">
+                                <i class="fas fa-edit"></i> EDIT
+                            </button>
+                        </div>
+                    </td>
+                    <td>
+                        {% if ch['js_path'] %}
+                        <span style="color: var(--neon-green);"><i class="fas fa-check-circle"></i> SESSION_FILE</span>
+                        <a href="{{ url_for('main.run_session_generator', id=ch['id']) }}"
+                            class="btn btn-sm btn-outline-info"
+                            style="font-size: 0.6rem; padding: 1px 5px; margin-left:5px;">
+                            <i class="fas fa-sync"></i> RENEW
+                        </a>
+                        {% else %}
+                        <span class="badge bg-warning text-dark">MISSING SESSION</span>
+                        <a href="{{ url_for('main.run_session_generator', id=ch['id']) }}"
+                            class="btn btn-sm btn-primary"
+                            style="font-size: 0.7rem; padding: 2px 8px; margin-left:5px;">
+                            <i class="fas fa-key"></i> GENERATE
+                        </a>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('main.delete_channel', id=ch['id']) }}" class="btn btn-sm btn-danger"
+                            style="font-size: 0.7rem; padding: 2px 8px;"
+                            onclick="return confirm('Terminate channel #{{ ch['id'] }}?')">
+                            TERMINATE
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted">NO CHANNELS CONFIGURED</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// ── Font map for browser preview (matches ImageMagick font names) ─────────────
+const FONT_FAMILY_MAP = {
+    "Impact":     "Impact, fantasy",
+    "Roboto":     "'Roboto', sans-serif",
+    "Montserrat": "'Montserrat', sans-serif",
+    "Oswald":     "'Oswald', sans-serif",
+    "Bebas Neue": "'Bebas Neue', sans-serif",
+    "Arial":      "Arial, sans-serif",
+};
+
+function updateFontPreview(fontValue) {
+    const preview = document.getElementById('fontPreviewBox');
+    preview.style.fontFamily = FONT_FAMILY_MAP[fontValue] || fontValue;
+}
+
+// ── Color picker ↔ hex input sync ────────────────────────────────────────────
+function syncPickers(pickerId, hexId, previewId) {
+    const picker = document.getElementById(pickerId);
+    const hex    = document.getElementById(hexId);
+    const prev   = previewId ? document.getElementById(previewId) : null;
+
+    picker.addEventListener('input', function() {
+        hex.value = this.value;
+        if (prev) prev.style.background = this.value;
+    });
+    hex.addEventListener('input', function() {
+        if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) {
+            picker.value = this.value;
+            if (prev) prev.style.background = this.value;
+        }
+    });
+}
+syncPickers('identityColorPicker', 'identityThemeColor',  null);
+syncPickers('accent1Picker',        'identityAccent1',     'accent1Preview');
+syncPickers('accent2Picker',        'identityAccent2',     'accent2Preview');
+
+// ── Open modal ───────────────────────────────────────────────────────────────
+function openIdentityModal(id, voiceId, themeColor, persona, fontStyle, accent1, accent2, sfxSet) {
+    document.getElementById('identityChannelId').value  = id;
+    document.getElementById('modalChannelLabel').innerText = `# Channel ${id}`;
+    document.getElementById('identityVoiceId').value    = voiceId    || 'af_sky';
+    document.getElementById('identityThemeColor').value = themeColor || '#FF0000';
+    document.getElementById('identityColorPicker').value = themeColor || '#FF0000';
+
+    // Persona — select closest option or set first
+    const personaSel = document.getElementById('identityPersona');
+    let matched = false;
+    for (let i = 0; i < personaSel.options.length; i++) {
+        if (personaSel.options[i].value === persona) {
+            personaSel.selectedIndex = i;
+            matched = true;
+            break;
+        }
+    }
+    if (!matched) personaSel.selectedIndex = 0;
+
+    // Font
+    const fontSel = document.getElementById('identityFontStyle');
+    for (let i = 0; i < fontSel.options.length; i++) {
+        if (fontSel.options[i].value === fontStyle) { fontSel.selectedIndex = i; break; }
+    }
+    updateFontPreview(fontSel.options[fontSel.selectedIndex].value);
+
+    // Accent colors
+    const a1 = accent1 || '#1E90FF';
+    const a2 = accent2 || '#FF6D00';
+    document.getElementById('identityAccent1').value  = a1;
+    document.getElementById('accent1Picker').value    = a1;
+    document.getElementById('accent1Preview').style.background = a1;
+    document.getElementById('identityAccent2').value  = a2;
+    document.getElementById('accent2Picker').value    = a2;
+    document.getElementById('accent2Preview').style.background = a2;
+
+    // SFX set
+    const sfxSel = document.getElementById('identitySfxSet');
+    for (let i = 0; i < sfxSel.options.length; i++) {
+        if (sfxSel.options[i].value === (sfxSet || 'default')) { sfxSel.selectedIndex = i; break; }
+    }
+
+    document.getElementById('identityStatus').innerText = '';
+    new bootstrap.Modal(document.getElementById('identityModal')).show();
+}
+
+// ── Save ─────────────────────────────────────────────────────────────────────
+function saveChannelIdentity() {
+    const channelId  = document.getElementById('identityChannelId').value;
+    const status     = document.getElementById('identityStatus');
+
+    const payload = {
+        channel_id:    parseInt(channelId),
+        voice_id:      document.getElementById('identityVoiceId').value.trim(),
+        theme_color:   document.getElementById('identityThemeColor').value.trim(),
+        persona:       document.getElementById('identityPersona').value,
+        font_style:    document.getElementById('identityFontStyle').value,
+        accent_color_1: document.getElementById('identityAccent1').value.trim(),
+        accent_color_2: document.getElementById('identityAccent2').value.trim(),
+        sfx_set:       document.getElementById('identitySfxSet').value,
+    };
+
+    status.style.color = '#aaa';
+    status.innerText   = '> Saving...';
+
+    fetch('/api/update_channel_identity', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.status === 'ok') {
+            status.style.color = 'var(--neon-green)';
+            status.innerText   = `✔ Saved — persona: '${d.persona}' | font: ${d.font_style} | sfx: ${d.sfx_set}`;
+            setTimeout(() => {
+                bootstrap.Modal.getInstance(document.getElementById('identityModal')).hide();
+                location.reload();
+            }, 1100);
+        } else {
+            status.style.color = 'var(--alert-red)';
+            status.innerText   = '✗ Error: ' + d.message;
+        }
+    })
+    .catch(() => {
+        status.style.color = 'var(--alert-red)';
+        status.innerText   = '✗ Network error';
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,504 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+/* ── Analytics-specific overrides ──────────────────────────── */
+.glow-gold {
+    box-shadow: 0 0 15px rgba(255,215,0,.2) inset;
+    border-left: 3px solid #ffd700 !important;
+    animation: pulse-gold 3s infinite;
+}
+@keyframes pulse-gold {
+    0%   { background-color: rgba(255,215,0,.02); }
+    50%  { background-color: rgba(255,215,0,.08); }
+    100% { background-color: rgba(255,215,0,.02); }
+}
+.progress-rail {
+    background: #222; height: 6px; width: 100%;
+    margin-top: 8px; border-radius: 3px; overflow: hidden;
+}
+.progress-fill {
+    height: 100%; background: var(--neon-cyan);
+    box-shadow: 0 0 8px var(--neon-cyan);
+    transition: width 1s ease-in-out;
+}
+.table-row-middle td { vertical-align: middle; }
+
+/* ── Summary cards ─────────────────────────────────────────── */
+.insight-cards { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 28px; }
+.insight-card {
+    flex: 1; min-width: 160px;
+    background: linear-gradient(135deg,#0a0a14,#101020);
+    border: 1px solid #1e1e3a; border-radius: 8px;
+    padding: 16px 18px;
+}
+.insight-card .ic-label  { font-size:.7rem; color:#555; text-transform:uppercase; letter-spacing:.08em; }
+.insight-card .ic-value  { font-size:1.5rem; font-weight:700; color:var(--neon-cyan); margin-top:4px; }
+.insight-card .ic-sub    { font-size:.72rem; color:#444; margin-top:3px; }
+
+/* ── Score badge ───────────────────────────────────────────── */
+.score-badge {
+    display:inline-block; min-width:28px; text-align:center;
+    border-radius:4px; font-weight:700; font-size:.8rem; padding:2px 6px;
+}
+.score-9  { background:#1a3a0a; color:#0aff0a; border:1px solid #0aff0a44; }
+.score-8  { background:#1a2f00; color:#9eff00; border:1px solid #9eff0044; }
+.score-low{ background:#1a0000; color:#ff6060; border:1px solid #ff606044; }
+
+/* ── Chart grid ────────────────────────────────────────────── */
+.chart-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:28px; }
+.chart-card {
+    background:#070710; border:1px solid #1a1a2e; border-radius:8px; padding:16px;
+}
+.chart-card h6 { font-size:.75rem; color:#555; text-transform:uppercase; letter-spacing:.07em; margin-bottom:12px; }
+
+/* ── Video table filter bar ────────────────────────────────── */
+.filter-bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+.filter-bar select, .filter-bar input {
+    background:#0a0a14; color:#ccc; border:1px solid #2a2a4a;
+    padding:4px 10px; border-radius:4px; font-size:.8rem;
+}
+.filter-bar label { font-size:.75rem; color:#555; }
+
+@media(max-width:768px){ .chart-grid{ grid-template-columns:1fr; } }
+</style>
+
+<!-- ── Page header ─────────────────────────────────────────── -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>/SYSTEM/INTELLIGENCE_HUB</h2>
+    <div>
+        <button id="updateBtn" onclick="updateAnalytics()" class="btn btn-sm btn-primary me-2">[ SYNC_DATA ]</button>
+        <button class="btn btn-sm btn-danger" onclick="window.print()">[ PRINT_LOG ]</button>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  SUMMARY CARDS                                            -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="insight-cards">
+    <div class="insight-card">
+        <div class="ic-label">Avg Qwen Score</div>
+        <div class="ic-value">{{ summary_cards.avg_score }}</div>
+        <div class="ic-sub">across {{ video_table|length }} uploaded videos</div>
+    </div>
+    <div class="insight-card">
+        <div class="ic-label">Avg Views / Video</div>
+        <div class="ic-value">{{ "{:,}".format(summary_cards.avg_views) }}</div>
+        <div class="ic-sub">YouTube views per published Short</div>
+    </div>
+    <div class="insight-card">
+        <div class="ic-label">Top Source Channel</div>
+        <div class="ic-value" style="font-size:1rem;">@{{ summary_cards.top_source }}</div>
+        <div class="ic-sub">highest avg views from this pool</div>
+    </div>
+    <div class="insight-card">
+        <div class="ic-label">Best Performing Sector</div>
+        <div class="ic-value" style="font-size:1rem;">{{ summary_cards.top_sector }}</div>
+        <div class="ic-sub">highest avg views per upload</div>
+    </div>
+    <div class="insight-card" style="flex:1.5;">
+        <div class="ic-label">Avg Views by Score Band</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+            {% for band, avg in summary_cards.score_band_avg.items() %}
+            <div style="text-align:center;">
+                <div class="score-badge {{ 'score-9' if band=='9' else ('score-8' if band=='8' else 'score-low') }}">{{ band }}</div>
+                <div style="font-size:.65rem; color:#555; margin-top:2px;">{{ "{:,}".format(avg) }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  CHARTS 2×2 GRID                                         -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="chart-grid">
+
+    <!-- Chart 1: Qwen Score vs Views Scatter -->
+    <div class="chart-card">
+        <h6>Does higher Qwen score = more views?</h6>
+        <canvas id="scatterChart" height="180"></canvas>
+    </div>
+
+    <!-- Chart 2: Source Channel Performance Bar -->
+    <div class="chart-card">
+        <h6>Which source channels give us the most viral clips?</h6>
+        <canvas id="barChart" height="180"></canvas>
+    </div>
+
+    <!-- Chart 3: Views Over Time -->
+    <div class="chart-card">
+        <h6>View trend over time</h6>
+        <canvas id="timeChart" height="180"></canvas>
+    </div>
+
+    <!-- Chart 4: Score Distribution Histogram -->
+    <div class="chart-card">
+        <h6>Quality distribution of uploaded clips</h6>
+        <canvas id="histChart" height="180"></canvas>
+    </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  YPP CHANNEL TABLE (preserved)                            -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="card-stat p-0 mb-5">
+    <div class="p-3 border-bottom border-secondary d-flex flex-wrap justify-content-between align-items-end">
+        <div>
+            <h4 style="margin:0; color:var(--neon-green); margin-bottom:5px;">>> DEEP_SCAN_RESULTS</h4>
+            <span class="badge" style="border-color:var(--neon-yellow);color:var(--neon-yellow)">
+                TOTAL_SUBS: {{ "{:,}".format(total_subs) }}
+            </span>
+            <span class="badge ms-2" style="border-color:var(--neon-cyan);color:var(--neon-cyan)">
+                90D_VIEWS: {{ "{:,}".format(total_90d) }}
+            </span>
+        </div>
+        <div style="flex-basis:600px;">
+            <form method="GET" class="row g-2">
+                <div class="col-md-3">
+                    <select name="sector" class="form-control form-control-sm" style="background:#000;color:#ccc;border:1px solid #444;">
+                        <option value="all">ALL_SECTORS</option>
+                        {% for sec in sectors %}
+                        <option value="{{ sec['id'] }}" {{ 'selected' if request.args.get('sector')==sec['id']|string }}>{{ sec['name'] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="level" class="form-control form-control-sm" style="background:#000;color:#ccc;border:1px solid #444;">
+                        <option value="all">ALL_LEVELS</option>
+                        <option value="1" {{ 'selected' if request.args.get('level')=='1' }}>Lvl 1 (New)</option>
+                        <option value="5" {{ 'selected' if request.args.get('level')=='5' }}>Lvl 5 (Elite)</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="status" class="form-control form-control-sm" style="background:#000;color:#ccc;border:1px solid #444;">
+                        <option value="all">ALL_STATUS</option>
+                        <option value="ELIGIBLE">★ ELIGIBLE</option>
+                        <option value="NOT_READY">GROWING</option>
+                        <option value="MONETIZED">$ MONETIZED</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100 btn-sm" style="padding:4px;">FILTER</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <table class="table table-hover mb-0 table-row-middle" style="font-size:.9rem;">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th style="width:25%;">NODE_IDENTITY</th>
+                <th style="width:30%;">PERFORMANCE (SUBS / 90D VIEWS)</th>
+                <th class="text-center">LEVEL</th>
+                <th class="text-center">YPP_STATUS</th>
+                <th class="text-end">DETAILS</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ch in channels %}
+            <tr class="{{ 'glow-gold' if ch['ypp_status'] in ('ELIGIBLE','MONETIZED') else '' }}">
+                <td><span class="text-muted">#{{ ch['id'] }}</span></td>
+                <td>
+                    <div style="font-weight:bold;color:white;font-size:1rem;">{{ ch['name'] or 'UNNAMED_NODE' }}</div>
+                    <div style="font-size:.75rem;color:var(--neon-pink);margin-top:2px;">
+                        [{{ ch['sector_name'] }}]
+                        {% if ch['refresh_token'] %}<i class="fas fa-link text-success ms-1"></i>
+                        {% else %}<i class="fas fa-unlink text-danger ms-1"></i>{% endif %}
+                    </div>
+                </td>
+                <td>
+                    <div class="d-flex justify-content-between" style="font-size:.82rem;margin-bottom:2px;">
+                        <span style="color:#eee;"><i class="fas fa-users" style="color:var(--neon-pink);"></i> {{ "{:,}".format(ch['subscriber_count']) }} aboneler</span>
+                        <span style="color:#555;font-size:.7rem;">/ 1K</span>
+                    </div>
+                    {% set subs_pct = [(ch['subscriber_count']/1000)*100, 100]|min %}
+                    <div class="progress-rail"><div class="progress-fill" style="width:{{ subs_pct }}%;background:{{ 'gold' if subs_pct>=100 else 'var(--neon-pink)' }};"></div></div>
+                    <div class="d-flex justify-content-between" style="font-size:.82rem;margin-top:8px;margin-bottom:2px;">
+                        <span style="color:var(--neon-cyan);"><i class="fas fa-eye"></i> {{ "{:,}".format(ch['views_90d']) }} (90g)</span>
+                        <span style="color:#555;font-size:.7rem;">/ 10M</span>
+                    </div>
+                    {% set views_pct = [(ch['views_90d']/10000000)*100, 100]|min %}
+                    <div class="progress-rail"><div class="progress-fill" style="width:{{ views_pct }}%;background:{{ 'gold' if views_pct>=100 else 'var(--neon-cyan)' }};"></div></div>
+                    <div style="font-size:.7rem;color:#444;margin-top:4px;">Toplam: {{ "{:,}".format(ch['sum_views']) }} izlenme</div>
+                </td>
+                <td class="text-center">
+                    <div style="border:1px solid var(--matrix-dark);padding:2px 8px;display:inline-block;color:#aaa;">{{ ch['level'] }}</div>
+                </td>
+                <td class="text-center">
+                    {% if ch['ypp_status']=='MONETIZED' %}<span style="color:gold;font-weight:bold;text-shadow:0 0 5px gold;">$ MONETIZED</span>
+                    {% elif ch['ypp_status']=='ELIGIBLE' %}<span style="color:gold;font-weight:bold;">★ READY!</span>
+                    {% else %}<span class="text-muted" style="font-size:.8rem;">GROWING...</span>{% endif %}
+                </td>
+                <td class="text-end">
+                    <a href="{{ url_for('main.channel_detail', id=ch['id']) }}" class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:.75rem;">
+                        Analyze <i class="fas fa-chart-line"></i>
+                    </a>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center py-5 text-muted">[ NO DATA MATCHING FILTER PARAMETERS ]</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  PER-VIDEO TABLE  (new)                                   -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="card-stat p-0 mb-5">
+    <div class="p-3 border-bottom border-secondary">
+        <h4 style="color:var(--neon-cyan);margin:0 0 12px;">>> VIDEO_INSIGHT_TABLE</h4>
+        <div class="filter-bar">
+            <div>
+                <label>Source channel</label><br>
+                <select id="filterSource" onchange="filterTable()">
+                    <option value="">All</option>
+                    {% for src in unique_sources %}
+                    <option value="{{ src }}">@{{ src }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label>Min Qwen score</label><br>
+                <input type="number" id="filterScore" min="1" max="9" value="1"
+                       style="width:70px;" onchange="filterTable()">
+            </div>
+            <div>
+                <label>Sort by</label><br>
+                <select id="sortBy" onchange="sortTable()">
+                    <option value="views">Views ↓</option>
+                    <option value="qwen_score">Qwen Score ↓</option>
+                    <option value="upload_date">Date ↓</option>
+                    <option value="likes">Likes ↓</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="table table-hover mb-0" style="font-size:.82rem;" id="videoTable">
+        <thead>
+            <tr>
+                <th style="cursor:pointer;" onclick="sortBy('qwen_score')">QWEN ▾</th>
+                <th>TITLE</th>
+                <th onclick="sortBy('source_channel')" style="cursor:pointer;">SOURCE ▾</th>
+                <th onclick="sortBy('views')" style="cursor:pointer;">VIEWS ▾</th>
+                <th onclick="sortBy('likes')" style="cursor:pointer;">LIKES ▾</th>
+                <th>CMT</th>
+                <th onclick="sortBy('upload_date')" style="cursor:pointer;">DATE ▾</th>
+            </tr>
+        </thead>
+        <tbody id="videoTbody">
+        {% for v in video_table %}
+        <tr data-source="{{ v.source_channel }}" data-score="{{ v.qwen_score }}">
+            <td>
+                <span class="score-badge {{ 'score-9' if v.qwen_score==9 else ('score-8' if v.qwen_score==8 else 'score-low') }}">
+                    {{ v.qwen_score }}
+                </span>
+            </td>
+            <td style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                title="{{ v.title }}">{{ v.title }}</td>
+            <td style="color:var(--neon-pink);">@{{ v.source_channel }}</td>
+            <td style="color:var(--neon-cyan);">{{ "{:,}".format(v.views) }}</td>
+            <td>{{ "{:,}".format(v.likes) }}</td>
+            <td>{{ v.comments }}</td>
+            <td style="color:#555;">{{ v.upload_date }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center py-4 text-muted">No uploaded video data yet</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!--  SCRIPTS                                                  -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const CHART_DEFAULTS = {
+    color:       '#666',
+    borderColor: '#1a1a2e',
+};
+Chart.defaults.color       = CHART_DEFAULTS.color;
+Chart.defaults.borderColor = CHART_DEFAULTS.borderColor;
+
+const NEON_CYAN  = '#00f3ff';
+const NEON_PINK  = '#ff003c';
+const NEON_GREEN = '#0aff0a';
+const NEON_GOLD  = '#ffd700';
+
+// ── Chart data from Flask ──────────────────────────────────
+const scatterRaw  = JSON.parse('{{ charts.scatter   | safe }}');
+const barLabels   = JSON.parse('{{ charts.bar_labels | safe }}');
+const barValues   = JSON.parse('{{ charts.bar_values | safe }}');
+const timeLabels  = JSON.parse('{{ charts.time_labels| safe }}');
+const timeValues  = JSON.parse('{{ charts.time_values| safe }}');
+const histLabels  = JSON.parse('{{ charts.hist_labels| safe }}');
+const histValues  = JSON.parse('{{ charts.hist_values| safe }}');
+
+// ── Chart 1: Scatter ─────────────────────────────────────
+new Chart(document.getElementById('scatterChart'), {
+    type: 'scatter',
+    data: {
+        datasets: [{
+            label: 'Videos',
+            data: scatterRaw.map(d => ({x: d.x, y: d.y})),
+            backgroundColor: scatterRaw.map(d =>
+                d.x === 9 ? NEON_CYAN + 'cc' :
+                d.x === 8 ? NEON_GREEN + 'aa' : NEON_PINK + '88'
+            ),
+            pointRadius: 5,
+            pointHoverRadius: 8,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { title: { display:true, text:'Qwen Score', color:'#555' },
+                 min:0, max:10, ticks:{color:'#555'}, grid:{color:'#111'} },
+            y: { title: { display:true, text:'Views',      color:'#555' },
+                 ticks:{color:'#555'}, grid:{color:'#111'} }
+        }
+    }
+});
+
+// ── Chart 2: Source Bar ──────────────────────────────────
+new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+        labels: barLabels.map(l => '@' + l),
+        datasets: [{
+            label: 'Avg Views',
+            data: barValues,
+            backgroundColor: NEON_CYAN + '22',
+            borderColor: NEON_CYAN,
+            borderWidth: 1,
+            barThickness: 18,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { ticks:{color:'#555', maxRotation:45}, grid:{display:false} },
+            y: { ticks:{color:'#555'}, grid:{color:'#111'} }
+        }
+    }
+});
+
+// ── Chart 3: Time Series ─────────────────────────────────
+new Chart(document.getElementById('timeChart'), {
+    type: 'line',
+    data: {
+        labels: timeLabels,
+        datasets: [{
+            label: 'Total Views',
+            data: timeValues,
+            borderColor: NEON_GREEN,
+            backgroundColor: NEON_GREEN + '11',
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: true,
+            tension: 0.3,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { ticks:{color:'#555', maxRotation:45, maxTicksLimit:10},
+                 grid:{display:false} },
+            y: { ticks:{color:'#555'}, grid:{color:'#111'} }
+        }
+    }
+});
+
+// ── Chart 4: Score Histogram ─────────────────────────────
+new Chart(document.getElementById('histChart'), {
+    type: 'bar',
+    data: {
+        labels: histLabels,
+        datasets: [{
+            label: 'Videos',
+            data: histValues,
+            backgroundColor: histLabels.map(s =>
+                s === '9' ? NEON_CYAN  + '55' :
+                s === '8' ? NEON_GREEN + '44' : NEON_PINK + '33'
+            ),
+            borderColor: histLabels.map(s =>
+                s === '9' ? NEON_CYAN  :
+                s === '8' ? NEON_GREEN : NEON_PINK
+            ),
+            borderWidth: 1,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            x: { title:{display:true,text:'Qwen Score',color:'#555'},
+                 ticks:{color:'#555'}, grid:{display:false} },
+            y: { title:{display:true,text:'# Videos',color:'#555'},
+                 ticks:{color:'#555'}, grid:{color:'#111'} }
+        }
+    }
+});
+
+// ── SYNC button ──────────────────────────────────────────
+function updateAnalytics() {
+    const btn = document.getElementById('updateBtn');
+    btn.disabled = true;
+    btn.innerText = '[ SYNCING... ]';
+    fetch('/api/trigger_analytics', { method: 'POST' })
+        .then(() => {
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerText = '[ SYNC_COMPLETE ]';
+                setTimeout(() => { btn.innerText = '[ SYNC_DATA ]'; location.reload(); }, 2000);
+            }, 2000);
+        });
+}
+
+// ── Video table filter & sort ────────────────────────────
+const _allRows = [...document.querySelectorAll('#videoTbody tr')];
+
+function filterTable() {
+    const src   = document.getElementById('filterSource').value.toLowerCase();
+    const score = parseInt(document.getElementById('filterScore').value) || 1;
+    _allRows.forEach(row => {
+        const rowSrc   = (row.dataset.source  || '').toLowerCase();
+        const rowScore = parseInt(row.dataset.score) || 0;
+        const show = (!src || rowSrc === src) && rowScore >= score;
+        row.style.display = show ? '' : 'none';
+    });
+}
+
+function sortTable() {
+    const key   = document.getElementById('sortBy').value;
+    const tbody = document.getElementById('videoTbody');
+    const rows  = [...tbody.querySelectorAll('tr')];
+    const cellIdx = { qwen_score:0, views:3, likes:4, upload_date:6, source_channel:2 };
+    const idx   = cellIdx[key] ?? 3;
+    rows.sort((a, b) => {
+        const av = a.cells[idx]?.innerText.replace(/,/g,'') || '';
+        const bv = b.cells[idx]?.innerText.replace(/,/g,'') || '';
+        return isNaN(av) ? bv.localeCompare(av) : parseFloat(bv) - parseFloat(av);
+    });
+    rows.forEach(r => tbody.appendChild(r));
+}
+// Alias for th click handlers
+function sortBy(key) {
+    document.getElementById('sortBy').value = key;
+    sortTable();
+}
+
+// ── Sector charts (existing) ─────────────────────────────
+const sectorLabels  = {{ sector_stats | map(attribute='sector_name') | list | tojson }};
+const revenueData   = {{ sector_stats | map(attribute='total_revenue') | list | tojson }};
+const videoData     = {{ sector_stats | map(attribute='video_count')   | list | tojson }};
+</script>
+{% endblock %}

@@ -1,0 +1,560 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<style>
+@media (max-width: 768px) {
+    .channel-row {
+        display: flex !important;
+        flex-wrap: wrap !important;
+    }
+    .progress-wrap {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+    .channel-name {
+        width: 100% !important;
+        margin-bottom: 4px;
+    }
+}
+</style>
+
+<div
+    style="text-align: right; margin-bottom: 20px; border-bottom: 1px dashed var(--matrix-dark); padding-bottom: 10px; display:flex; align-items:center; justify-content:flex-end; gap:12px; flex-wrap:wrap;">
+    <span id="statsLastUpdated" style="color:#555; font-size:0.78rem; font-family:'Fira Code',monospace;">analytics: checking...</span>
+    <span id="processorStatusText" style="color: var(--neon-pink); font-size: 0.9rem;"></span>
+    <button id="processorBtn" onclick="triggerProcessor()" class="btn"
+        style="border-color: var(--neon-pink); color: var(--neon-pink);">
+        [ RUN_SECTOR_PROCESSOR ]
+    </button>
+
+    <span id="updateStatusText" style="color: var(--matrix-green); font-size: 0.9rem;">::
+        SYSTEM_READY ::</span>
+    <button id="updateBtn" onclick="startAnalyticsUpdate()" class="btn">
+        [ EXEC_UPDATE_API ]
+    </button>
+
+</div>
+
+<div class="modal fade" id="resultModal" tabindex="-1" aria-hidden="true" style="backdrop-filter: blur(5px);">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content"
+            style="background-color: #0a0a0a; border: 1px solid var(--neon-cyan); box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);">
+
+            <div class="modal-header" style="border-bottom: 1px dashed var(--matrix-dark);">
+                <h5 class="modal-title" style="color: var(--neon-green); font-family: 'VT323', monospace;">>>
+                    OPERATION_REPORT_LOG</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"
+                    style="filter: invert(1);"></button>
+            </div>
+
+            <div class="modal-body" style="color: #ccc; font-family: 'Fira Code', monospace; font-size: 0.9rem;">
+                <div class="row text-center mb-3">
+                    <div class="col-4">
+                        <h3 id="resTotal" style="color:white">0</h3>
+                        <small class="text-muted">TOTAL_TARGETS</small>
+                    </div>
+                    <div class="col-4">
+                        <h3 id="resSuccess" style="color:var(--neon-green)">0</h3>
+                        <small class="text-muted">SUCCESSFUL</small>
+                    </div>
+                    <div class="col-4">
+                        <h3 id="resFailed" style="color:var(--alert-red)">0</h3>
+                        <small class="text-muted">FAILED</small>
+                    </div>
+                </div>
+
+                <hr style="border-color: var(--matrix-dark);">
+
+                <h6 style="color: var(--neon-pink)">[ ERROR_LOGS ]</h6>
+                <div id="errorLogContent"
+                    style="max-height: 200px; overflow-y: auto; background: #111; padding: 10px; border: 1px solid #333;">
+                    <span class="text-muted">No errors detected. System nominal.</span>
+                </div>
+            </div>
+
+
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card-stat p-0" style="border: 1px solid var(--matrix-dark);">
+                        <div class="d-flex justify-content-between align-items-center p-2"
+                            style="background: #111; border-bottom: 1px solid var(--matrix-dark);">
+                            <h5 style="margin:0; font-size: 0.9rem; color: #666;">
+                                <i class="fas fa-terminal"></i> /var/log/system_core.log
+                            </h5>
+                            <span class="badge bg-danger" style="font-size: 0.7rem;">LIVE FEED</span>
+                        </div>
+
+                        <div id="terminal-window"
+                            style="height: 300px; overflow-y: auto; padding: 15px; background-color: #050505; font-family: 'Fira Code', monospace; font-size: 0.85rem; display: flex; flex-direction: column-reverse;">
+                            <div class="text-muted">Connecting to log stream...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="modal-footer" style="border-top: 1px dashed var(--matrix-dark);">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal"
+                    onclick="location.reload()">[ CLOSE & REFRESH ]</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ── Recent AI-Generated Shorts ──────────────────────────────────────── -->
+{% if recent_shorts %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card-stat p-0" style="border: 1px solid var(--matrix-dark);">
+            <div class="d-flex justify-content-between align-items-center p-2"
+                style="background: #111; border-bottom: 1px solid var(--matrix-dark);">
+                <h5 style="margin:0; font-size: 0.9rem; color: #666;">
+                    <i class="fas fa-robot"></i> /ai/recent_shorts [ last 5 ]
+                </h5>
+                <span class="badge" style="background:var(--neon-pink); font-size:0.7rem;">AI-GENERATED</span>
+            </div>
+            <div style="padding: 12px; font-family:'Fira Code',monospace; font-size:0.82rem;">
+                {% for s in recent_shorts %}
+                <div style="border-bottom: 1px solid #1a1a1a; padding: 8px 4px; display:flex; flex-direction:column; gap:4px;">
+
+                    {# ── Title row ──────────────────────────────────────────── #}
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <span style="color:#555; min-width:72px; flex-shrink:0;">#{{ s.id }}</span>
+                        <span style="color:var(--neon-cyan); flex:1; font-weight:600;">
+                            {{ s.title or ("Pending AI Analysis... #" ~ s.id) }}
+                        </span>
+                        {# Score badge #}
+                        <span class="badge" style="background:#1a1a2e; color:var(--neon-pink); border:1px solid var(--neon-pink); flex-shrink:0;">
+                            ★ {{ s.qwen_score }}/9
+                        </span>
+                        {# TTS ready badge #}
+                        {% if s.has_tts %}
+                        <span class="badge" style="background:#0d2d0d; color:#6fcf97; border:1px solid #2d5a2d; font-size:0.7rem; flex-shrink:0;">
+                            <i class="fas fa-volume-up"></i> TTS
+                        </span>
+                        {% endif %}
+                        {# Infobox ready badge #}
+                        {% if s.infobox_1 or s.infobox_2 %}
+                        <span class="badge" style="background:#1a1200; color:#f2c94c; border:1px solid #5a4700; font-size:0.7rem; flex-shrink:0;">
+                            <i class="fas fa-info-circle"></i> INFO
+                        </span>
+                        {% endif %}
+                        {# Render time badge #}
+                        {% if s.render_time_seconds %}
+                        <span class="badge" style="background:#0a0a1a; color:#888; border:1px solid #2a2a3a; font-size:0.7rem; flex-shrink:0;" title="Render time">
+                            ⏱ {{ "%.1f"|format(s.render_time_seconds / 60) }} min
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    {# ── Summary voiceover line ──────────────────────────────── #}
+                    {% if s.summary_text %}
+                    <div style="color:#aaa; padding-left:82px; font-size:0.78rem;">▶ {{ s.summary_text }}</div>
+                    {% endif %}
+
+                    {# ── Infobox badges ──────────────────────────────────────── #}
+                    {% if s.infobox_1 or s.infobox_2 %}
+                    <div style="padding-left:82px; display:flex; gap:8px; flex-wrap:wrap; margin-top:2px;">
+                        {% if s.infobox_1 %}
+                        <span style="background:#0d2d0d; color:#6fcf97; border:1px solid #2d5a2d; border-radius:4px; padding:2px 8px; font-size:0.75rem;">
+                            ✔ {{ s.infobox_1 | truncate(60, True, '…') }}
+                        </span>
+                        {% endif %}
+                        {% if s.infobox_2 %}
+                        <span style="background:#1a1200; color:#f2c94c; border:1px solid #5a4700; border-radius:4px; padding:2px 8px; font-size:0.75rem;">
+                            ★ {{ s.infobox_2 | truncate(60, True, '…') }}
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ── Weekly Cycle Status ───────────────────────────────────────────────── -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card" id="cycle-status-card" style="background:#111; border: 1px solid var(--matrix-dark);">
+            <div class="card-header" style="border-bottom: 1px solid var(--matrix-dark); color: #666; font-size: 0.9rem; font-family: 'VT323', monospace;">
+                <i class="fas fa-calendar-alt" style="color:var(--neon-cyan);"></i> 📅 Haftalık Döngü
+            </div>
+            <div class="card-body" style="padding: 12px 16px;">
+                <span id="cycle-phase-badge" class="badge">-</span>
+                <span id="cycle-next-upload" style="margin-left:10px; color:#888; font-size:0.85rem;"></span>
+                <div id="cycle-details" style="margin-top:8px; font-size:0.8rem; color:#aaa; font-family:'Fira Code', monospace;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Pipeline Health ─────────────────────────────────────────────────── -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card-stat p-0" style="border: 1px solid var(--matrix-dark);">
+            <div class="d-flex justify-content-between align-items-center p-3"
+                style="background:#111; border-bottom:1px solid var(--matrix-dark);">
+                <h5 style="margin:0; font-size:0.9rem; color:#666; font-family:'VT323',monospace;">
+                    <i class="fas fa-heartbeat" style="color:var(--neon-pink);"></i>
+                    /sys/pipeline_health [ 30-DAY FULFILLMENT STATUS ]
+                </h5>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <span id="fulfillmentLastRun"
+                        style="color:#555; font-size:0.72rem; font-family:'Fira Code',monospace;">
+                        checking...
+                    </span>
+                    <button id="fulfillBtn" onclick="triggerFulfillment()"
+                        class="btn btn-sm"
+                        style="border-color:var(--neon-cyan); color:var(--neon-cyan); font-size:0.72rem; padding:2px 10px;">
+                        <i class="fas fa-play-circle"></i> TRIGGER_FULFILLMENT
+                    </button>
+                </div>
+            </div>
+
+            <!-- Pool Exhaustion Warnings -->
+            <div id="exhaustionWarnings" style="display:none; padding:8px 16px;
+                background:#1a0a00; border-bottom:1px solid #4a2200;">
+            </div>
+
+            <!-- Channel inventory table -->
+            <div style="padding:12px 16px; font-family:'Fira Code',monospace; font-size:0.82rem;">
+                <div id="pipelineTable">
+                    <div style="color:#444; text-align:center; padding:20px;">
+                        Loading pipeline status...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let pollInterval;
+
+    // ── Stats last-updated indicator ─────────────────────────────────────────
+    function fetchStatsTimestamp() {
+        fetch('/api/stats_last_updated')
+            .then(r => r.json())
+            .then(d => {
+                const el = document.getElementById('statsLastUpdated');
+                el.innerText = `analytics: ${d.last_run_str} (every ${d.interval_hours}h)`;
+            })
+            .catch(() => {});
+    }
+    fetchStatsTimestamp();
+    setInterval(fetchStatsTimestamp, 30000); // refresh indicator every 30s
+
+    // ── Weekly Cycle Status ──────────────────────────────────────────────────
+    function refreshCycleStatus() {
+        fetch('/api/cycle_status')
+        .then(r => r.json())
+        .then(d => {
+            const badge = document.getElementById('cycle-phase-badge');
+            const colors = {
+                'PRODUCING': '#E67E22',
+                'WAITING': '#3498DB', 
+                'UPLOADING': '#2ECC71',
+                'CLEANUP': '#9B59B6',
+                'IDLE': '#7F8C8D'
+            };
+            badge.textContent = d.phase || 'IDLE';
+            badge.style.background = colors[d.phase] || '#7F8C8D';
+            
+            if (d.next_upload) {
+                const dt = new Date(d.next_upload);
+                document.getElementById('cycle-next-upload').textContent = 
+                    'Sonraki yükleme: ' + dt.toLocaleDateString('tr-TR') + ' ' + dt.toLocaleTimeString('tr-TR');
+            } else {
+                document.getElementById('cycle-next-upload').textContent = '';
+            }
+            
+            const details = [];
+            if (d.channel) details.push('Kanal: ' + d.channel + '/20');
+            if (d.total) details.push('Toplam: ' + d.total);
+            document.getElementById('cycle-details').textContent = details.join(' | ');
+        })
+        .catch(() => {});
+    }
+    refreshCycleStatus();
+    setInterval(refreshCycleStatus, 15000);
+
+    // ── Pipeline Health ───────────────────────────────────────────────────────
+    function fetchFulfillmentStatus() {
+        fetch('/api/fulfillment_status')
+            .then(r => r.json())
+            .then(data => {
+                const lastRunEl = document.getElementById('fulfillmentLastRun');
+                lastRunEl.innerText = `last check: ${data.last_run_str}`;
+
+                const table = document.getElementById('pipelineTable');
+                if (!data.channels || data.channels.length === 0) {
+                    table.innerHTML = '<div style="color:#444; text-align:center; padding:20px;">No channels configured.</div>';
+                    return;
+                }
+
+                let html = `
+                    <div class="channel-row" style="display:grid; grid-template-columns:minmax(140px,1fr) 40px 120px 60px 200px 80px; gap:6px 12px; align-items:center;
+                                color:#555; font-size:0.72rem; padding:0 4px 6px 4px; border-bottom:1px solid #1a1a1a; margin-bottom:6px;">
+                        <span class="channel-name">CHANNEL</span><span>LV</span><span>HAVE / TARGET</span>
+                        <span>GAP</span><span class="progress-wrap">PROGRESS</span><span>STATUS</span>
+                    </div>`;
+
+                data.channels.forEach(ch => {
+                    const pct     = Math.min(100, Math.round((ch.current / Math.max(ch.target, 1)) * 100));
+                    const barFill = Math.round(pct * 0.22);  // 22 chars wide
+                    const barStr  = '█'.repeat(barFill) + '░'.repeat(22 - barFill);
+
+                    const statusColors = {
+                        FULL:     { text: 'var(--neon-green)',  bg: '#0d2d0d', border: '#2d5a2d' },
+                        LOW:      { text: '#f2c94c',            bg: '#1a1200', border: '#5a4700' },
+                        CRITICAL: { text: 'var(--alert-red)',   bg: '#2d0a0a', border: '#5a1a1a' },
+                    };
+                    const sc = statusColors[ch.status] || statusColors.CRITICAL;
+
+                    const barColor = ch.status === 'FULL'     ? 'var(--neon-green)'
+                                   : ch.status === 'LOW'      ? '#f2c94c'
+                                   : 'var(--alert-red)';
+
+                    html += `
+                    <div class="channel-row" style="display:grid; grid-template-columns:minmax(140px,1fr) 40px 120px 60px 200px 80px;
+                                gap:6px 12px; align-items:center; padding:5px 4px;
+                                border-bottom:1px solid #111;">
+                        <span class="channel-name" style="color:white; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                              title="${ch.name}">${ch.name}</span>
+                        <span style="color:var(--neon-cyan);">${ch.level}</span>
+                        <span style="color:#aaa;">${ch.current} / ${ch.target}</span>
+                        <span style="color:${ch.gap > 0 ? 'var(--alert-red)' : 'var(--neon-green)'}; font-weight:600;">
+                            ${ch.gap > 0 ? '+' + ch.gap : '✓'}
+                        </span>
+                        <span class="progress-wrap" style="color:${barColor}; letter-spacing:-1px; font-size:0.78rem;">[${barStr}] ${pct}%</span>
+                        <span style="background:${sc.bg}; color:${sc.text}; border:1px solid ${sc.border};
+                                     border-radius:3px; padding:1px 6px; font-size:0.7rem; text-align:center;">
+                            ${ch.status}
+                        </span>
+                    </div>`;
+                });
+
+                table.innerHTML = html;
+
+                // Footer summary
+                const totalGap = data.channels.reduce((s, c) => s + c.gap, 0);
+                const critical = data.channels.filter(c => c.status === 'CRITICAL').length;
+                const full     = data.channels.filter(c => c.status === 'FULL').length;
+                table.innerHTML += `
+                    <div style="margin-top:8px; color:#444; font-size:0.72rem; display:flex; gap:20px; padding:4px;">
+                        <span>🟢 FULL: <b style="color:var(--neon-green);">${full}</b></span>
+                        <span>🔴 CRITICAL: <b style="color:var(--alert-red);">${critical}</b></span>
+                        <span>TOTAL_GAP: <b style="color:#f2c94c;">${totalGap} videos</b></span>
+                    </div>`;
+            })
+            .catch(() => {
+                document.getElementById('pipelineTable').innerHTML =
+                    '<div style="color:#555; text-align:center; padding:20px;">Unable to fetch pipeline status.</div>';
+            });
+    }
+
+    function fetchExhaustionWarnings() {
+        fetch('/api/pool_exhaustion_warnings')
+            .then(r => r.json())
+            .then(warnings => {
+                const el = document.getElementById('exhaustionWarnings');
+                if (!warnings || warnings.length === 0) {
+                    el.style.display = 'none';
+                    return;
+                }
+                el.style.display = 'block';
+                el.innerHTML = warnings.map(w => `
+                    <div style="color:#f2994a; font-size:0.75rem; font-family:'Fira Code',monospace; padding:2px 0;">
+                        ⚠ [${w.timestamp}] ${w.message.substring(0, 120)}
+                    </div>`).join('');
+            })
+            .catch(() => {});
+    }
+
+    function triggerFulfillment() {
+        const btn = document.getElementById('fulfillBtn');
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.innerText = '⏳ LAUNCHING...';
+
+        fetch('/api/trigger_fulfillment', { method: 'POST' })
+            .then(r => r.json())
+            .then(d => {
+                if (d.status === 'started') {
+                    btn.innerText = '✓ LAUNCHED';
+                    btn.style.color = 'var(--neon-green)';
+                    btn.style.borderColor = 'var(--neon-green)';
+                    setTimeout(() => {
+                        btn.innerText = 'TRIGGER_FULFILLMENT';
+                        btn.style.color = 'var(--neon-cyan)';
+                        btn.style.borderColor = 'var(--neon-cyan)';
+                        btn.style.opacity = '1';
+                        btn.disabled = false;
+                    }, 3000);
+                } else {
+                    alert('Fulfillment error: ' + d.message);
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.innerHTML = '<i class="fas fa-play-circle"></i> TRIGGER_FULFILLMENT';
+                }
+            })
+            .catch(() => {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.innerHTML = '<i class="fas fa-play-circle"></i> TRIGGER_FULFILLMENT';
+            });
+    }
+
+    // Auto-refresh pipeline status every 60s
+    fetchFulfillmentStatus();
+    fetchExhaustionWarnings();
+    setInterval(fetchFulfillmentStatus, 60000);
+    setInterval(fetchExhaustionWarnings, 60000);
+
+
+
+    function startAnalyticsUpdate() {
+        const btn = document.getElementById('updateBtn');
+        const statusText = document.getElementById('updateStatusText');
+
+        btn.disabled = true;
+        btn.style.opacity = "0.5";
+        statusText.innerText = ":: INITIALIZING... ::";
+        statusText.style.color = "var(--neon-yellow)";
+
+        fetch('/api/trigger_analytics', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "started") {
+                    statusText.innerText = ":: PROCESSING_DATA... ::";
+                    pollInterval = setInterval(checkStatus, 2000);
+                } else {
+                    alert("Error: " + data.message);
+                    resetUI();
+                }
+            })
+            .catch(err => { console.error(err); resetUI(); });
+    }
+
+    function triggerProcessor() {
+        const btn = document.getElementById('processorBtn');
+        const statusText = document.getElementById('processorStatusText');
+
+        btn.disabled = true;
+        btn.style.opacity = "0.5";
+        statusText.innerText = ":: TRIGGERING... ::";
+
+        fetch('/api/trigger_processor', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "success") {
+                    statusText.innerText = ":: CYCLE_STARTED ::";
+                    setTimeout(() => {
+                        statusText.innerText = "";
+                        btn.disabled = false;
+                        btn.style.opacity = "1";
+                    }, 3000);
+                } else {
+                    alert("Error: " + data.message);
+                    statusText.innerText = ":: ERROR ::";
+                    btn.disabled = false;
+                    btn.style.opacity = "1";
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                statusText.innerText = ":: COMM_FAIL ::";
+                btn.disabled = false;
+                btn.style.opacity = "1";
+            });
+    }
+
+    function checkStatus() {
+        fetch('/api/analytics_status')
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "COMPLETED") {
+                    clearInterval(pollInterval);
+                    showResults(data.result);
+                    resetUI();
+                } else if (data.status === "ERROR") {
+                    clearInterval(pollInterval);
+                    alert("Critical Error: " + data.result.error);
+                    resetUI();
+                }
+            });
+    }
+
+    function showResults(result) {
+        document.getElementById('resTotal').innerText = result.total;
+        document.getElementById('resSuccess').innerText = result.success;
+        document.getElementById('resFailed').innerText = result.failed;
+
+        const errorDiv = document.getElementById('errorLogContent');
+        errorDiv.innerHTML = "";
+
+        if (result.errors && result.errors.length > 0) {
+            result.errors.forEach(err => {
+                errorDiv.innerHTML += `<div style="color: var(--alert-red); margin-bottom: 5px;">> ${err}</div>`;
+            });
+        } else {
+            errorDiv.innerHTML = '<span style="color: var(--neon-green);">»> ALL SYSTEMS NOMINAL. NO ERRORS.</span>';
+        }
+
+        var myModal = new bootstrap.Modal(document.getElementById('resultModal'));
+        myModal.show();
+    }
+
+    function resetUI() {
+        const btn = document.getElementById('updateBtn');
+        const statusText = document.getElementById('updateStatusText');
+        btn.disabled = false;
+        btn.style.opacity = "1";
+        statusText.innerText = ":: SEQUENCE_COMPLETE ::";
+        statusText.style.color = "var(--neon-green)";
+    }
+
+    // ── Live log feed ──────────────────────────────────────────────────────
+    function fetchLogs() {
+        fetch('/api/system_logs')
+            .then(res => res.json())
+            .then(data => {
+                const terminal = document.getElementById('terminal-window');
+                let htmlContent = '';
+
+                data.forEach(log => {
+                    let colorClass = 'text-white';
+                    if (log.level === 'ERROR')   colorClass = 'text-danger fw-bold';
+                    else if (log.level === 'WARNING') colorClass = 'text-warning';
+                    else if (log.level === 'SUCCESS') colorClass = 'text-success';
+                    else if (log.level === 'INFO')    colorClass = 'text-info';
+
+                    let timePart = log.created_at.split(' ')[1] || log.created_at;
+
+                    htmlContent += `
+                        <div class="log-line" style="border-bottom: 1px solid #111; padding: 2px 0;">
+                            <span style="color: #444;">[${timePart}]</span>
+                            <span style="color: var(--neon-pink); width: 100px; display:inline-block;">[${log.source}]</span>
+                            <span class="${colorClass}">>> ${log.message}</span>
+                        </div>
+                    `;
+                });
+
+                terminal.innerHTML = htmlContent;
+            })
+            .catch(err => console.error("Log error:", err));
+    }
+
+    setInterval(fetchLogs, 2000);
+    fetchLogs();
+
+</script>
+
+{% endblock %}

@@ -1,0 +1,59 @@
+# ============================================================
+# UTube Automation — .gitignore
+# ============================================================
+
+# === HASSAS VERİLER (SECRETS & CREDENTIALS) ===
+client_secret.json
+email_config.json
+tokens/
+sessions/
+automation.db
+automation.db.backup
+automation.db-journal
+web/automation.db
+
+# === BÜYÜK MODEL / BİNARY DOSYALAR ===
+model.onnx
+voices-v1.0.bin
+Practical-RIFE/train_log/flownet.pkl
+
+# === RUNTIME VERİLERİ (Yazılım Tarafından Oluşturulan) ===
+tts_cache/*.wav
+shorts/
+downloads/
+segments/
+web/downloads/*
+!web/downloads/.gitkeep
+last_cycle_date.txt
+weekly_cycle_status.json
+
+# === ARKAPLAN MÜZİKLERİ (Kullanıcı Tarafından Eklenen) ===
+bg_music/**/*.mp3
+bg_music/**/*.wav
+bg_music/**/*.ogg
+bg_music/**/*.m4a
+
+# === GEÇİCİ DOSYALAR ===
+*TEMP_MPY*
+_captions_tmp*
+temp-audio*
+*.tmp
+*.bak
+
+# === PYTHON ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# === IDE / OS ===
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+Thumbs.db

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 style="color: var(--neon-cyan);">
+        <i class="fas fa-edit"></i> EDITING: <span class="text-white">{{ file_name }}</span>
+    </h4>
+    <div>
+        <button class="btn btn-sm btn-success" onclick="saveFile()">[ SAVE_CHANGES ]</button>
+        <a href="{{ url_for('main.file_manager', req_path=file_path.rsplit('/', 1)[0]) }}" class="btn btn-sm btn-secondary">[ CLOSE ]</a>
+    </div>
+</div>
+
+<div class="card-stat p-0" style="height: 80vh;">
+    <textarea id="fileContent" 
+              style="width: 100%; height: 100%; background: #0a0a0a; color: #0f0; 
+                     font-family: 'Fira Code', monospace; border: none; padding: 15px; resize: none; outline: none;">{{ content }}</textarea>
+</div>
+
+<script>
+    function saveFile() {
+        const content = document.getElementById('fileContent').value;
+        const filePath = "{{ file_path }}";
+        
+        fetch('/save_file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ 'file_path': filePath, 'content': content })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.status === 'success') alert(">> FILE_SAVED_SUCCESSFULLY");
+            else alert(">> ERROR: " + data.message);
+        })
+        .catch(err => alert(">> NETWORK_ERROR"));
+    }
+    
+    // Ctrl+S ile kaydetme
+    document.addEventListener('keydown', e => {
+        if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            saveFile();
+        }
+    });
+</script>
+{% endblock %}
