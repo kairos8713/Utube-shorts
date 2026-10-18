@@ -17,10 +17,10 @@
 | Phase | Status | Notes |
 |---|---|---|
 | 0 Setup (backup, git, docs) | DONE | backups/pre_migration_20261019, baseline commit 6c7b7c09f5 |
-| 1 Security | IN PROGRESS | |
-| 2 Cleanup + IG format | TODO | |
-| 3 Qwen/Ollama + GPU lock | TODO | |
-| 4 3-day cycle, schema, guardrails, brain | TODO | |
+| 1 Security | DONE | commit 1110d847df; .env created (keys generated), DB password encrypted |
+| 2 Cleanup + IG format | DONE | commit ec0bb574a4; real RIFE run verified 60fps/8.9Mbps/-14.4 LUFS |
+| 3 Qwen/Ollama + GPU lock | DONE (Ollama BLOKE) | client+Modelfile+mock; no Ollama/GGUF on PC |
+| 4 3-day cycle, schema, guardrails, brain | IN PROGRESS | |
 | 5 IG publisher + scheduler | TODO | |
 | 6 Comment responder | TODO | |
 | 7 Source discovery / fast lane | TODO | |
@@ -31,4 +31,6 @@
 | 12 Morning report | TODO | |
 
 ## Next step
-Phase 1: config.py + .env.example, crypto_utils.py, scripts/init_secrets.py, panel auth.
+Phase 4: models (new tables), m002 migration, guardrails.py, timeutil (UTC/Warsaw), system_state,
+brain/ (action schemas + validator + decisions log), cycle_runner.py (CYCLE_DAYS=3, buffer),
+wire production.py persistence (videos rows, dedup).

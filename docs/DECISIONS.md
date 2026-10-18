@@ -68,6 +68,35 @@ Format: **Karar / Gerekçe / Alternatif**. Decisions taken unattended overnight 
 - **Risk flagged in MORNING_REPORT:** the tracks look like YouTube Audio Library music, whose
   licence covers YouTube videos; Instagram may mute or block them.
 
+## D-011 Ollama / Qwen3-32B — BLOKE, code + mocks only
+- **Karar:** Ollama is not installed and `C:\models\Qwen3-32B-Q4_K_M.gguf` does not exist on
+  this PC (only the old HF cache `Qwen2.5-14B-Instruct-AWQ`). Wrote `ollama/Modelfile`,
+  `llm_client.py`, and `llm_mock.py` (`LLM_BACKEND=mock`). All tests and the E2E dry run use
+  the mock. Nothing was downloaded.
+- **Not verified:** that Ollama honours `think:false` with this custom TEMPLATE. Mitigation: the
+  client also appends `/no_think` and strips `<think>…</think>` before parsing.
+- **VRAM:** 19.8 GB weights + ~4 GB KV cache at 16k ctx ≈ 24 GB = both 3060s full. Recommend
+  `OLLAMA_FLASH_ATTENTION=1` + `OLLAMA_KV_CACHE_TYPE=q8_0`; if Ollama still offloads to CPU,
+  drop `OLLAMA_NUM_CTX` to 8192 (no prompt needs more than ~6k tokens).
+
+## D-012 GPU lock granularity
+- **Karar:** One global cross-process file lock (`GPU_LOCK_PATH`). Whisper and Qwen stages hold
+  it for the whole stage (model stays loaded); render+RIFE take it per clip, so the comment
+  responder / fast lane can slip in between clips.
+- **Gerekçe:** Qwen 32B needs both GPUs, so per-GPU locks would not allow parallelism anyway.
+
+## D-013 Captions are assembled by code
+- **Karar:** Qwen returns only `{comment, hashtags}`; code appends the hashtags and the
+  `🎥 @handle` credit line, and rejects links, @mentions, follow/subscribe CTAs, >2 sentences,
+  generic tags (#shorts/#fyp/#viral) and captions ≥0.75 similar to the last 50.
+- **Gerekçe:** The credit must always be the original source; the model never writes it.
+
+## D-014 Whisper once per segment, word timestamps reused
+- **Karar:** Whisper runs once per 3-min segment with `word_timestamps=True`; the segment text
+  feeds clip scoring and the same word list is sliced for each clip's captions. Language is
+  auto-detected; non-English sources are skipped.
+- **Gerekçe:** Required by the strict batch order (Whisper stage fully before Qwen stage).
+
 ## D-010 requirements
 - **Karar:** No `requirements.txt` existed; created a curated UTF-8 one (pinned to installed
   versions). The old UTF-16 freeze `requirements_working_20260522.txt` was converted to UTF-8.

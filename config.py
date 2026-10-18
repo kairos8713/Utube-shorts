@@ -54,6 +54,9 @@ _SPEC = {
     "OLLAMA_URL":            (str, "http://127.0.0.1:11434"),
     "OLLAMA_MODEL":          (str, "qwen3-32b-local"),
     "OLLAMA_TIMEOUT_S":      (int, "600"),
+    "OLLAMA_NUM_CTX":        (int, "16384"),
+    "OLLAMA_KEEP_ALIVE":     (str, "15m"),           # within a batch; unload() → keep_alive 0
+    "LLM_BACKEND":           (str, "ollama"),        # ollama | mock (tests / E2E without Ollama)
     "WHISPER_MODEL":         (str, "small"),
     # ── Instagram ───────────────────────────────────────────────────────────
     "IG_APP_ID":             (str, ""),

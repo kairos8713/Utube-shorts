@@ -1,0 +1,45 @@
+# Ollama Modelfile — local Qwen3-32B (Q4_K_M GGUF)
+#
+#   ollama create qwen3-32b-local -f ollama/Modelfile
+#
+# Expected weights: C:\models\Qwen3-32B-Q4_K_M.gguf (~19.8 GB). On 2× RTX 3060 (24 GB total)
+# Ollama splits layers across both cards. 16k context + fp16 KV cache is ~4 GB extra and
+# may spill a few layers to CPU; set these system env vars before starting Ollama:
+#   OLLAMA_FLASH_ATTENTION=1
+#   OLLAMA_KV_CACHE_TYPE=q8_0
+#
+# The TEMPLATE mirrors Qwen3's ChatML format and honours Ollama's `think` request flag
+# (think=false → empty <think></think> block). llm_client.py additionally appends /no_think
+# and strips any <think> output, so JSON tasks work even if this template is not used.
+
+FROM C:\models\Qwen3-32B-Q4_K_M.gguf
+
+PARAMETER num_ctx 16384
+PARAMETER temperature 0.6
+PARAMETER top_p 0.95
+PARAMETER top_k 20
+PARAMETER repeat_penalty 1.05
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+
+TEMPLATE """{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}
+{{- range $i, $_ := .Messages }}
+{{- $last := eq (len (slice $.Messages $i)) 1 -}}
+{{- if eq .Role "system" }}<|im_start|>system
+{{ .Content }}<|im_end|>
+{{ else if eq .Role "user" }}<|im_start|>user
+{{ .Content }}<|im_end|>
+{{ else if eq .Role "assistant" }}<|im_start|>assistant
+{{ .Content }}{{ if not $last }}<|im_end|>
+{{ end }}
+{{- end }}
+{{- if and $last (ne .Role "assistant") }}<|im_start|>assistant
+{{ if and $.IsThinkSet (not $.Think) }}<think>
+
+</think>
+
+{{ end }}
+{{- end }}
+{{- end }}"""

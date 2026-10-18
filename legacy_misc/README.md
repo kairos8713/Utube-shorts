@@ -10,3 +10,5 @@ Archived non-YouTube code that the new system replaces. Not imported by active c
 - `migrate_ig_columns.py` — superseded by `db_migrate.py`
 - `esrgan_upscaler.py` — 4K upscale step, unused (delivery is 1080×1920)
 - `test_render.py` — script for the old 3-stage 72 fps render
+- `multimodal_context.py` — librosa energy/pitch + scene-cut context for the old 6-prompt Qwen
+  pipeline; unused after the hook/insight/infobox prompts were removed
