@@ -1,149 +1,16 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎀 Hello Kitty'nin Gizli Günlüğü 🎀</title>
-    <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Varela+Round&display=swap" rel="stylesheet">
-    <style>
-        body {
-            background-color: #ffe6f2; /* Toz pembe arka plan */
-            background-image: url('https://i.pinimg.com/originals/a2/83/e0/a283e060060060060060060060060060.png'); /* Hello Kitty pattern */
-            background-size: 100px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            font-family: 'Varela Round', sans-serif;
-        }
-
-        .login-container {
-            background-color: #fff0f5; /* Daha açık pembe kutu */
-            padding: 40px;
-            border-radius: 30px;
-            box-shadow: 0 10px 25px rgba(255, 105, 180, 0.3); /* Pembe gölge */
-            text-align: center;
-            border: 5px solid #ffb6c1; /* Kalın pembe çerçeve */
-            max-width: 400px;
-            width: 90%;
-            position: relative;
-        }
-
-        /* Hello Kitty Kafası (Üstte) */
-        .kitty-header {
-            width: 120px;
-            height: auto;
-            margin-top: -80px;
-            margin-bottom: 20px;
-        }
-
-        h1 {
-            color: #ff69b4; /* Koyu pembe başlık */
-            font-family: 'Pacifico', cursive;
-            font-size: 2.5rem;
-            margin-bottom: 30px;
-            text-shadow: 2px 2px 0px #fff;
-        }
-
-        input[type="text"], input[type="password"] {
-            width: 100%;
-            padding: 15px;
-            margin-bottom: 20px;
-            border: 3px solid #ffb6c1;
-            border-radius: 15px;
-            box-sizing: border-box;
-            font-size: 1rem;
-            color: #ff69b4;
-            outline: none;
-        }
-        input::placeholder { color: #ffc0cb; }
-        input:focus { border-color: #ff69b4; }
-
-        .btn-login {
-            width: 100%;
-            padding: 15px;
-            border: none;
-            border-radius: 15px;
-            background-color: #ff69b4;
-            color: white;
-            font-size: 1.2rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            box-shadow: 0 5px 0 #db7093; /* 3D buton efekti */
-        }
-        .btn-login:hover { background-color: #ff1493; }
-        .btn-login:active { 
-            box-shadow: none; 
-            transform: translateY(5px); 
-        }
-
-        .alert {
-            background-color: #ffe4e1;
-            color: #d63384;
-            padding: 10px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            font-size: 0.9rem;
-            border: 2px dashed #ffb6c1;
-        }
-        
-        /* Masum Süsler */
-        .sparkle {
-            position: absolute;
-            font-size: 2rem;
-            color: #ffd700;
-            animation: twinkle 1.5s infinite alternate;
-        }
-        @keyframes twinkle { from { opacity: 0.5; transform: scale(0.8); } to { opacity: 1; transform: scale(1.2); } }
-
-    </style>
-</head>
-<body>
-
-    <div class="login-container">
-        <img src="https://upload.wikimedia.org/wikipedia/en/0/05/Hello_kitty_character_portrait.png" alt="Hello Kitty" class="kitty-header">
-        
-        <div class="sparkle" style="top: 10px; left: 20px;">✨</div>
-        <div class="sparkle" style="bottom: 20px; right: 20px; animation-delay: 0.5s;">💖</div>
-
-        <h1>Gizli Günlük Girişi</h1>
-        
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert">{{ message }} 🥺</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <form method="POST">
-            <input type="text" name="username" placeholder="Sevimli Adın (admin)" required>
-            <input type="password" name="password" placeholder="Sihirli Şifren (secret123)" required>
-            <button type="submit" class="btn-login">Günlüğü Aç! 🎀</button>
-        </form>
-        
-        <p style="color: #ff69b4; font-size: 0.8rem; margin-top: 20px;">
-            (Sadece en iyi arkadaşlar girebilir!)
-        </p>
-    </div>
-
-{% if trigger_close %}
-    <script>
-        // Kullanıcıya veda etmeden hemen işlem yap
-        
-        // Yöntem 1: Kendini açan pencere gibi gösterip kapatmayı dene
-        window.open('','_parent','');
-        window.close();
-        
-        // Yöntem 2: Eğer tarayıcı kapatmaya izin vermezse, 
-        // masum bir sayfaya (Hello Kitty resmi veya Google) yönlendir.
-        setTimeout(function() {
-            window.location.href = "https://www.sanrio.com/"; // Hello Kitty Sitesi :)
-        }, 100);
-    </script>
-    {% endif %}
-
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}Giriş{% endblock %}
+{% block content %}
+<div class="card" style="max-width:380px;margin:60px auto;">
+  <h1>Giriş</h1>
+  {% if not configured %}
+    <div class="alert warn">Panel şifresi ayarlanmamış. Sunucuda çalıştırın:<br>
+      <code>python scripts/init_secrets.py --set-panel-password</code></div>
+  {% endif %}
+  <form method="post">
+    <p><input name="username" placeholder="Kullanıcı adı" autocomplete="username" required style="width:100%"></p>
+    <p><input name="password" type="password" placeholder="Şifre" autocomplete="current-password" required style="width:100%"></p>
+    <button class="btn primary" type="submit">Giriş yap</button>
+  </form>
+</div>
+{% endblock %}

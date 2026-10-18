@@ -1,561 +1,76 @@
-<!DOCTYPE html>
-<html lang="en">
-
+<!doctype html>
+<html lang="tr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ROOT@SHADOW_CORE:~#</title>
-
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap-grid.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Roboto:wght@700&family=Montserrat:wght@700&family=Oswald:wght@700&family=Bebas+Neue&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <style>
-        :root {
-            --matrix-green:  #0f0;
-            --matrix-dark:   #003b00;
-            --alert-red:     #ff0000;
-            --bg-black:      #000000;
-            --scanline-color: rgba(0, 0, 0, 0.5);
-            /* Neon accent palette — used across channels.html + analytics.html */
-            --neon-green:    #39FF14;
-            --neon-cyan:     #00FFFF;
-            --neon-pink:     #FF10F0;
-            --neon-orange:   #FF6D00;
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        body {
-            margin: 0;
-            background-color: var(--bg-black);
-            color: var(--matrix-green);
-            font-family: 'VT323', monospace;
-            font-size: 1.3rem;
-            overflow-x: hidden;
-            text-shadow: 0 0 2px var(--matrix-green);
-        }
-
-        /* --- CRT EFEKTLERİ --- */
-        body::before {
-            content: " ";
-            display: block;
-            position: fixed;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            right: 0;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            z-index: 9999;
-            background-size: 100% 2px, 3px 100%;
-            pointer-events: none;
-        }
-
-        @keyframes flicker {
-            0% {
-                opacity: 0.97;
-            }
-
-            50% {
-                opacity: 0.95;
-            }
-
-            100% {
-                opacity: 0.98;
-            }
-        }
-
-        .wrapper {
-            animation: flicker 0.15s infinite;
-            margin-left: 220px;
-            min-height: 100vh;
-        }
-
-        /* --- SIDEBAR --- */
-        .sidebar {
-            width: 220px;
-            height: 100vh;
-            position: fixed;
-            left: 0;
-            top: 0;
-            border-right: 1px solid var(--matrix-dark);
-            padding: 20px;
-            background: #000;
-            z-index: 10000;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* --- GLITCH BRAND (GERİ GELDİ) --- */
-        .brand {
-            font-size: 1.8rem;
-            border-bottom: 2px solid var(--matrix-green);
-            padding-bottom: 10px;
-            margin-bottom: 30px;
-            text-align: left;
-            cursor: default;
-            position: relative;
-            color: #fff;
-        }
-
-        .glitch {
-            position: relative;
-            color: var(--matrix-green);
-        }
-
-        .glitch::before,
-        .glitch::after {
-            content: attr(data-text);
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #000;
-        }
-
-        .glitch::before {
-            left: 2px;
-            text-shadow: -1px 0 red;
-            clip: rect(24px, 550px, 90px, 0);
-            animation: glitch-anim-2 3s infinite linear alternate-reverse;
-        }
-
-        .glitch::after {
-            left: -2px;
-            text-shadow: -1px 0 blue;
-            clip: rect(85px, 550px, 140px, 0);
-            animation: glitch-anim 2.5s infinite linear alternate-reverse;
-        }
-
-        @keyframes glitch-anim {
-            0% {
-                clip: rect(11px, 9999px, 34px, 0);
-            }
-
-            20% {
-                clip: rect(89px, 9999px, 12px, 0);
-            }
-
-            40% {
-                clip: rect(34px, 9999px, 56px, 0);
-            }
-
-            60% {
-                clip: rect(12px, 9999px, 88px, 0);
-            }
-
-            80% {
-                clip: rect(67px, 9999px, 32px, 0);
-            }
-
-            100% {
-                clip: rect(9px, 9999px, 100px, 0);
-            }
-        }
-
-        @keyframes glitch-anim-2 {
-            0% {
-                clip: rect(65px, 9999px, 100px, 0);
-            }
-
-            20% {
-                clip: rect(12px, 9999px, 4px, 0);
-            }
-
-            40% {
-                clip: rect(9px, 9999px, 76px, 0);
-            }
-
-            60% {
-                clip: rect(43px, 9999px, 21px, 0);
-            }
-
-            80% {
-                clip: rect(2px, 9999px, 98px, 0);
-            }
-
-            100% {
-                clip: rect(33px, 9999px, 11px, 0);
-            }
-        }
-
-        .brand span {
-            background: var(--matrix-green);
-            padding: 0 5px;
-            color: #000;
-            margin-right: 5px;
-        }
-
-        /* --- NAV LINK --- */
-        .nav-link {
-            display: block;
-            color: var(--matrix-dark);
-            text-decoration: none;
-            padding: 10px 0;
-            font-size: 1.4rem;
-            transition: 0s;
-            cursor: pointer;
-            position: relative;
-        }
-
-        .nav-link::before {
-            content: "> ";
-            color: var(--matrix-green);
-            opacity: 0;
-        }
-
-        .nav-link:hover,
-        .nav-link.active {
-            color: var(--matrix-green);
-            background: #001100;
-            text-shadow: 2px 2px 0px #000;
-        }
-
-        .nav-link:hover::before,
-        .nav-link.active::before {
-            opacity: 1;
-        }
-
-        /* --- CONTENT --- */
-        .content {
-            padding: 30px;
-        }
-
-        h2,
-        h3,
-        h4,
-        h5 {
-            color: var(--matrix-green);
-            text-transform: uppercase;
-            border-bottom: 1px dashed var(--matrix-dark);
-            padding-bottom: 5px;
-            margin-top: 30px;
-        }
-
-        /* --- KUTULAR --- */
-        .card,
-        .card-stat {
-            border: 1px solid var(--matrix-green);
-            background: #000;
-            padding: 15px;
-            margin-bottom: 20px;
-            position: relative;
-        }
-
-        .card::after {
-            content: "BLOCK_END";
-            position: absolute;
-            bottom: -10px;
-            right: 10px;
-            font-size: 0.8rem;
-            background: #000;
-            padding: 0 5px;
-            color: var(--matrix-dark);
-        }
-
-        .card h3 {
-            border: none;
-            margin-top: 0;
-            font-size: 2.5rem;
-        }
-
-        .card p {
-            margin: 0;
-            color: var(--matrix-dark);
-            font-size: 1rem;
-            text-transform: uppercase;
-        }
-
-        /* --- TABLOLAR --- */
-        .table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            font-family: 'VT323', monospace;
-        }
-
-        .table th {
-            text-align: left;
-            border-bottom: 2px solid var(--matrix-green);
-            color: #fff;
-            background: #000;
-            padding: 10px;
-        }
-
-        .table td {
-            border-bottom: 1px solid var(--matrix-dark);
-            padding: 8px 10px;
-            color: var(--matrix-green);
-        }
-
-        .table tr:hover td {
-            background-color: var(--matrix-green);
-            color: #000;
-        }
-
-        .table a {
-            color: inherit;
-            text-decoration: underline;
-        }
-
-        /* --- FORMLAR --- */
-        input[type="text"],
-        input[type="password"],
-        textarea,
-        select {
-            background: #000;
-            border: none;
-            border-bottom: 1px solid var(--matrix-green);
-            color: var(--matrix-green);
-            font-family: 'VT323', monospace;
-            font-size: 1.2rem;
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
-        }
-
-        input:focus,
-        textarea:focus,
-        select:focus {
-            outline: none;
-            background: #001100;
-        }
-
-        /* --- BUTONLAR --- */
-        .btn {
-            background: #000;
-            border: 1px solid var(--matrix-green);
-            color: var(--matrix-green);
-            padding: 10px 20px;
-            text-transform: uppercase;
-            font-family: 'VT323', monospace;
-            font-size: 1.2rem;
-            cursor: pointer;
-            display: inline-block;
-            text-decoration: none;
-            margin-top: 10px;
-        }
-
-        .btn:hover {
-            background: var(--matrix-green);
-            color: #000;
-            box-shadow: 0 0 10px var(--matrix-green);
-        }
-
-        .btn-danger {
-            border-color: var(--alert-red);
-            color: var(--alert-red);
-        }
-
-        .btn-danger:hover {
-            background: var(--alert-red);
-            color: #000;
-            box-shadow: 0 0 10px var(--alert-red);
-        }
-
-        /* --- ALERTS --- */
-        .alert {
-            border: 1px solid;
-            padding: 10px;
-            margin-bottom: 15px;
-            font-size: 1rem;
-        }
-
-        .alert-success {
-            border-color: var(--matrix-green);
-            color: var(--matrix-green);
-        }
-
-        .alert-danger {
-            border-color: var(--alert-red);
-            color: var(--alert-red);
-        }
-
-        .alert-info {
-            border-color: #fff;
-            color: #fff;
-        }
-
-        /* Scrollbar */
-        ::-webkit-scrollbar {
-            width: 10px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: #000;
-            border-left: 1px solid var(--matrix-dark);
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--matrix-dark);
-            border: 1px solid var(--matrix-green);
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--matrix-green);
-        }
-
-        /* --- RESPONSIVE MEDIA QUERIES --- */
-        @media (max-width: 768px) {
-            .sidebar {
-                transform: translateX(-100%);
-                transition: transform 0.3s ease;
-                width: 80%;
-                /* Wider on mobile for better touch targets */
-                max-width: 300px;
-                border-right: 2px solid var(--matrix-green);
-                box-shadow: 10px 0 20px rgba(0, 0, 0, 0.8);
-            }
-
-            .sidebar.active {
-                transform: translateX(0);
-            }
-
-            .wrapper {
-                margin-left: 0;
-            }
-
-            .mobile-toggle {
-                display: block !important;
-                position: fixed;
-                top: 15px;
-                right: 15px;
-                z-index: 10001;
-                background: #000;
-                border: 1px solid var(--matrix-green);
-                color: var(--matrix-green);
-                padding: 5px 10px;
-                font-family: 'VT323';
-                font-size: 1.5rem;
-                cursor: pointer;
-            }
-
-            .brand {
-                font-size: 1.4rem;
-                margin-bottom: 20px;
-            }
-
-            h2 {
-                font-size: 1.5rem;
-            }
-
-            /* Stack flex rows vertically */
-            .row, .d-flex {
-                flex-direction: column !important;
-            }
-
-            /* Full-width columns */
-            .col, .col-1, .col-2, .col-3, .col-4, .col-6, .col-8, .col-12,
-            [class*="col-"] {
-                width: 100% !important;
-                max-width: 100% !important;
-                flex: 0 0 100% !important;
-            }
-
-            /* Scrollable tables on small screens */
-            table, .table {
-                display: block;
-                overflow-x: auto;
-                white-space: nowrap;
-                -webkit-overflow-scrolling: touch;
-            }
-
-            /* Full-width cards/panels */
-            .card, .card-stat {
-                width: 100% !important;
-                margin: 5px 0 !important;
-            }
-
-            /* Larger touch targets */
-            .btn, button, a.btn {
-                min-height: 44px;
-                padding: 10px 16px;
-            }
-
-            /* Content padding reduced */
-            .content {
-                padding: 15px 10px;
-            }
-        }
-
-        .mobile-toggle {
-            display: none;
-        }
-
-        /* Table Scroll Container */
-        .table-responsive {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Reels Kontrol{% endblock %}</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5d6677; --line: #dfe3ea;
+  --accent: #2f5bd3; --danger: #c62828; --danger-bg: #fdecec; --warn: #a15c00; --warn-bg: #fff4e0;
+  --ok: #1b7a3d; --ok-bg: #e6f4ea;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151b; --panel: #1b2029; --text: #e6e9ef; --muted: #9aa3b2; --line: #2c3340;
+    --accent: #7ea2ff; --danger: #ff6b6b; --danger-bg: #3a1d1f; --warn: #ffb74d; --warn-bg: #3a2c16;
+    --ok: #6fd08c; --ok-bg: #173023;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+       font: 15px/1.5 "Segoe UI", system-ui, sans-serif; }
+header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 0 16px; }
+nav { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; max-width: 1200px; margin: 0 auto; }
+nav a { color: var(--muted); text-decoration: none; padding: 12px 10px; font-weight: 600; }
+nav a.active, nav a:hover { color: var(--text); }
+nav .brand { color: var(--text); margin-right: 12px; }
+nav .spacer { flex: 1; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 22px; margin: 8px 0 16px; }
+h2 { font-size: 17px; margin: 24px 0 8px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.stat .v { font-size: 22px; font-weight: 700; } .stat .k { color: var(--muted); font-size: 13px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-size: 13px; font-weight: 600; }
+.table-wrap { overflow-x: auto; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: 700;
+         background: var(--line); color: var(--text); }
+.badge.ok { background: var(--ok-bg); color: var(--ok); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); }
+.badge.danger { background: var(--danger-bg); color: var(--danger); }
+.alert { border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; border: 1px solid; }
+.alert.danger { background: var(--danger-bg); color: var(--danger); border-color: var(--danger); }
+.alert.warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+.alert.info { background: var(--panel); border-color: var(--line); }
+button, .btn { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line);
+               background: var(--panel); color: var(--text); cursor: pointer; text-decoration: none; display: inline-block; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.big { font-size: 18px; font-weight: 800; padding: 14px 24px; }
+input, select, textarea { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+                          background: var(--bg); color: var(--text); }
+form.inline { display: inline; }
+.muted { color: var(--muted); }
+pre { white-space: pre-wrap; word-break: break-word; }
+</style>
 </head>
-
 <body>
-
-    <!-- Mobile Toggle -->
-    <button class="mobile-toggle" onclick="document.querySelector('.sidebar').classList.toggle('active')">
-        <i class="fas fa-bars"></i> MENU
-    </button>
-
-    <div class="sidebar">
-        <div class="brand glitch" data-text="SHADOW_CORE">
-            <span>root@</span>SHADOW_CORE
-        </div>
-
-        <a href="{{ url_for('main.dashboard') }}"
-            class="nav-link {{ 'active' if request.endpoint == 'main.dashboard' else '' }}">
-            /mnt/dashboard
-        </a>
-        <a href="{{ url_for('main.channels') }}"
-            class="nav-link {{ 'active' if request.endpoint == 'main.channels' else '' }}">
-            /usr/channels
-        </a>
-        <a href="{{ url_for('main.pool') }}" class="nav-link {{ 'active' if request.endpoint == 'main.pool' else '' }}">
-            /src/pool
-        </a>
-        <a href="{{ url_for('main.analytics') }}"
-            class="nav-link {{ 'active' if request.endpoint == 'main.analytics' else '' }}">
-            <i class="fas fa-chart-pie" style="width: 25px;"></i> /sys/analytics
-        </a>
-        <a href="{{ url_for('main.file_manager') }}"
-            class="nav-link {{ 'active' if 'file_manager' in request.endpoint else '' }}">
-            <i class="fas fa-folder-open" style="width: 25px;"></i> /sys/files
-        </a>
-        <br>
-        <div
-            style="font-size: 0.8rem; color: var(--matrix-dark); padding-top: 20px; border-top: 1px dashed var(--matrix-dark);">
-            CPU: <span id="cpu-load">--</span>% <br>
-            RAM: <span id="ram-load">--</span>%
-        </div>
-    </div>
-
-    <div class="wrapper">
-        <div class="content">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-            {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">
-                >> SYSTEM_MSG: {{ message|safe }}
-            </div>
-            {% endfor %}
-            {% endif %}
-            {% endwith %}
-
-            {% block content %}{% endblock %}
-        </div>
-    </div>
-
-    <script>
-        setInterval(() => {
-            document.getElementById('cpu-load').innerText = Math.floor(Math.random() * 30 + 10);
-            document.getElementById('ram-load').innerText = Math.floor(Math.random() * 40 + 20);
-        }, 1000);
-    </script>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+{% if session.get('logged_in') %}
+<header><nav>
+  <a class="brand" href="{{ url_for('main.home') }}">Reels Kontrol</a>
+  {% block nav %}{% endblock %}
+  <span class="spacer"></span>
+  <a href="{{ url_for('auth.logout') }}">Çıkış</a>
+</nav></header>
+{% endif %}
+<main>
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}<div class="alert {{ 'danger' if cat == 'danger' else ('warn' if cat == 'warning' else 'info') }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
 </body>
-
 </html>

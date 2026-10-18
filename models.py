@@ -3,9 +3,11 @@ from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Float, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
-# Veritabani Dosyasi: proje_klasoru/automation.db
+from config import settings
+
+# Veritabani: DATABASE_URL (.env) — varsayılan proje_klasoru/automation.db
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = f"sqlite:///{os.path.join(BASE_DIR, 'automation.db')}"
+DB_PATH = settings.DATABASE_URL
 
 Base = declarative_base()
 
