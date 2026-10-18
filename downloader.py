@@ -55,6 +55,9 @@ def classify_ytdlp_error(stderr: str):
         return YouTubeBlocked("BOT_CHECK", stderr)
     if any(h in s for h in COOKIE_HINTS):
         return YouTubeBlocked("COOKIES", stderr)
+    if "http error 403" in s and ("po token" in s or "unable to download video data" in s):
+        # 2026-10: YouTube demands a GVS PO token → every download fails the same way
+        return YouTubeBlocked("FORBIDDEN_403_PO_TOKEN", stderr)
     if any(h in s for h in PRIVATE_HINTS):
         return VideoUnavailable(stderr[:300])
     return DownloadError(stderr[-500:] if stderr else "yt-dlp failed")

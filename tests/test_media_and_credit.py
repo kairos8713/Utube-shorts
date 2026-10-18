@@ -64,3 +64,6 @@ def test_classify_ytdlp_errors():
     e = classify_ytdlp_error("ERROR: The provided YouTube account cookies are no longer valid")
     assert isinstance(e, YouTubeBlocked) and e.kind == "COOKIES"
     assert isinstance(classify_ytdlp_error("ERROR: Private video"), VideoUnavailable)
+    e = classify_ytdlp_error("WARNING: android_vr client https formats require a GVS PO Token ...\n"
+                             "ERROR: unable to download video data: HTTP Error 403: Forbidden")
+    assert isinstance(e, YouTubeBlocked) and e.kind == "FORBIDDEN_403_PO_TOKEN"

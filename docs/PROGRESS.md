@@ -10,6 +10,8 @@
 - 2× RTX 3060 12 GB (driver 610.88), CUDA visible to torch (2 devices)
 - Python 3.11.9, FFmpeg 2026-08-03 essentials (gyan.dev), Node at C:\Program Files\nodejs
 - Ollama: NOT installed. `C:\models\Qwen3-32B-Q4_K_M.gguf`: NOT present.
+- yt-dlp real downloads fail: HTTP 403 (GVS PO token) — E2E uses `--synthetic`.
+- docs/MORNING_REPORT.md drafted; placeholders E2E_* / TEST_COUNT / COMMITS to fill at the end.
 - Whisper `small.pt` cached. Practical-RIFE + flownet.pkl present.
 - Installed tonight: pytest, cryptography, imagehash, boto3, dulwich
 

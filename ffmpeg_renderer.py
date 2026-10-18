@@ -339,6 +339,8 @@ def render_reel(video_path: str, start: float, end: float, word_segments: List[d
     Raises on render failure — there is no MoviePy fallback.
     """
     t0 = time.time()
+    if work_dir:
+        os.makedirs(work_dir, exist_ok=True)
     work = tempfile.mkdtemp(prefix="reel_", dir=work_dir)
     try:
         base = render_base(video_path, start, end, os.path.join(work, "base30.mp4"), bgm_path)

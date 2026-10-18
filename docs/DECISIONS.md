@@ -172,6 +172,15 @@ PUBLISH_LIMIT; 368 / subcode 2207051 / "spam"/"blocked"/"restricted" → ACTION_
   `https://localhost:5050/oauth/instagram/callback`, let the browser fail to load it, and paste the
   address bar URL (code + state are validated the same way).
 
+## D-024 YouTube 403 / PO token = systemic block
+- **Karar:** During the E2E run a real download failed: `android_vr client https formats require a
+  GVS PO Token … ERROR: unable to download video data: HTTP Error 403` (yt-dlp 2026.08.19).
+  This is now classified as `YouTubeBlocked("FORBIDDEN_403_PO_TOKEN")` → downloads stop for the
+  cycle + CRITICAL alert, instead of burning every source video as "failed".
+- **Not done:** `pip install -U yt-dlp` was NOT run tonight (it would change the Python env shared
+  with other pipelines). cycle_runner does it once per cycle when it runs.
+- **E2E fallback:** synthetic testsrc footage + local Windows SAPI speech.
+
 ## D-010 requirements
 - **Karar:** No `requirements.txt` existed; created a curated UTF-8 one (pinned to installed
   versions). The old UTF-16 freeze `requirements_working_20260522.txt` was converted to UTF-8.
