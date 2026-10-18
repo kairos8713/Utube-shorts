@@ -22,15 +22,15 @@
 | 3 Qwen/Ollama + GPU lock | DONE (Ollama BLOKE) | client+Modelfile+mock; no Ollama/GGUF on PC |
 | 4 3-day cycle, schema, guardrails, brain | DONE | real DB migrated (002, 004) |
 | 5 IG publisher + scheduler | DONE | docs verified (D-020); default upload r2_url; publish_runner.py |
-| 6 Comment responder | IN PROGRESS | |
-| 7 Source discovery / fast lane | TODO | |
-| 8 Analytics feedback | TODO | |
-| 9 Web panel | TODO | |
-| 10 Ops / resilience | TODO | |
-| 11 Tests + E2E dry run | TODO | |
+| 6 Comment responder | DONE | |
+| 7 Source discovery / fast lane | DONE | |
+| 8 Analytics feedback | DONE | |
+| 9 Web panel | DONE | |
+| 10 Ops / resilience | DONE | autostart script written, NOT run |
+| 11 Tests + E2E dry run | IN PROGRESS | 153 unit tests pass |
 | 12 Morning report | TODO | |
 
 ## Next step
-Phase 6: comment_responder.py (poll 10 min, classify, rules, reply filter, 40–70 min delay, hide spam).
-Still to write: sources_manager (Ph7: cycle_maintenance, plan_production, performance_summary,
-fast_lane, blacklist_source), analytics.collect_due (Ph8), reports (Ph9), maintenance (Ph10).
+Phase 11: scripts/e2e_dry_run.py — temp DB, 1 account, synthetic source → real Whisper → mock Qwen →
+real render + RIFE → QC → queue → simulated publish (DRY_RUN) → simulated comment reply → report;
+ffprobe verification + frame extraction. Then Phase 12 MORNING_REPORT.md.

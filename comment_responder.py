@@ -308,7 +308,10 @@ def tick(session, now=None):
 
 def main():
     import db_migrate
+    import power
     db_migrate.run(log=log.info)
+    power.prevent_sleep()
+    system_state.register_service("comment_responder")
     while True:
         s = Session()
         try:

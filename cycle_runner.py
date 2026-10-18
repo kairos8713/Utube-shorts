@@ -159,6 +159,7 @@ def main():
 
     db_migrate.run(log=log.info)
     power.prevent_sleep()
+    system_state.register_service("cycle_runner")
     while True:
         session = models.Session()
         try:

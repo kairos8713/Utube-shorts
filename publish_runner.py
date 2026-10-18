@@ -76,6 +76,7 @@ def main():
     import power
     db_migrate.run(log=log.info)
     power.prevent_sleep()
+    system_state.register_service("publisher")
     log.info("publisher service started (DRY_RUN=%s)", __import__("config").settings.DRY_RUN)
     while True:
         session = Session()

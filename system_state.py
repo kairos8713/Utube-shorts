@@ -64,6 +64,18 @@ def heartbeat(service: str, session=None):
     put(f"heartbeat:{service}", utcnow().isoformat(), session)
 
 
+def register_service(service: str, session=None):
+    """Called once at service start: PID for the watchdog + first heartbeat."""
+    import os
+    put(f"pid:{service}", str(os.getpid()), session)
+    heartbeat(service, session)
+
+
+def service_pid(service: str, session=None):
+    v = get(f"pid:{service}", None, session)
+    return int(v) if v and v.isdigit() else None
+
+
 def last_heartbeat(service: str, session=None):
     v = get(f"heartbeat:{service}", None, session)
     try:

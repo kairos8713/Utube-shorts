@@ -155,6 +155,23 @@ Error classification (codes from general Graph API knowledge, **not re-verified 
 PUBLISH_LIMIT; 368 / subcode 2207051 / "spam"/"blocked"/"restricted" → ACTION_BLOCKED;
 5xx, 1, 2 → TRANSIENT; 9007 / 2207027 → NOT_READY.
 
+## D-021 Backups never contain the Fernet key
+- **Karar:** `backups/daily/automation_YYYYMMDD.db` (14 kept) holds tokens/passwords only in
+  encrypted form; `.env`/FERNET_KEY is not copied. Emre must keep FERNET_KEY in a password
+  manager — without it the tokens in any backup are unreadable (re-connect accounts).
+
+## D-022 Processes
+- **Karar:** 5 processes: `cycle_runner.py` (production + 6-hourly fast lane — the only GPU
+  producer), `publish_runner.py` (publishing, token refresh, insights, maintenance),
+  `comment_responder.py`, `panel.py`, `watchdog.py`. The fast lane lives in the cycle runner so
+  hours of GPU work never block publishing.
+
+## D-023 Panel OAuth redirect
+- **Karar:** Meta requires an HTTPS redirect URI; the panel is plain HTTP on 127.0.0.1. The panel
+  offers `/oauth/instagram/callback` *and* a "paste the final URL" form, so Emre can register
+  `https://localhost:5050/oauth/instagram/callback`, let the browser fail to load it, and paste the
+  address bar URL (code + state are validated the same way).
+
 ## D-010 requirements
 - **Karar:** No `requirements.txt` existed; created a curated UTF-8 one (pinned to installed
   versions). The old UTF-16 freeze `requirements_working_20260522.txt` was converted to UTF-8.
