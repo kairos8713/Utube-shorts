@@ -19,18 +19,40 @@ e-postaya, R2'ye hiçbir istek gitmedi.
 | 8 Analitik | ✅ | |
 | 9 Web paneli | ✅ | Tüm sayfalar testte hatasız açılıyor. |
 | 10 Dayanıklılık | ✅ | Görev Zamanlayıcı script'i yazıldı, **çalıştırılmadı**. |
-| 11 Testler + uçtan uca kuru çalıştırma | E2E_STATUS | |
+| 11 Testler + uçtan uca kuru çalıştırma | ✅ | 203 test geçti; E2E PASS (sentetik kaynak, mock Qwen) |
 | 12 Bu rapor | ✅ | |
 
 ## 2. Test sonuçları ve kuru çalıştırma
 
-- `python -m pytest -q tests` → **TEST_COUNT**
-- Uçtan uca DRY_RUN (`python scripts/e2e_dry_run.py --synthetic`): E2E_SUMMARY
+- `python -m pytest -q tests` → **203 passed** (~33 sn). Kapsam: guardrail'ler, Qwen eylem
+  doğrulayıcı (yasak/aşırı/kapsam dışı öneriler reddediliyor), prompt injection (talimatlı yorum →
+  link/@ içeren yanıt engellendi, dış metin hep veri bloğunda), zamanlayıcı (8 dk boşluk, tam %25
+  keşif, kaçan paylaşım dağıtımı, **25 Ekim 2026 DST**: pencere 15 saat), çift yayın koruması,
+  otomatik durdurma, token yenileme, pHash tekrar kontrolü, render QC, e-posta tekilleştirme,
+  migration'lar, tüm panel sayfaları, CSRF. Instagram ve Ollama mock'lu.
+- Uçtan uca DRY_RUN (`python scripts/e2e_dry_run.py --synthetic`): **PASS** — 13/13 kontrol.
+  Akış: sentetik kaynak (76 sn, SAPI konuşma) → Whisper (11 sn, 60 kelime zamanlı) → mock Qwen →
+  render + RIFE (88 sn; RIFE 57 sn) → QC → kapak (19.8 sn) → kuyruk → simüle yayın (istekler sadece
+  loglandı) → 4 simüle yorum: soru → yanıtlandı (dry), "my video… take it down" → RISKY + outbox
+  e-postası, spam linki → gizlendi (dry), emoji → yanıtsız → rapor. Yayından sonra reel dosyası silindi.
 
-E2E_TABLE
+| Kontrol | Sonuç |
+|---|---|
+| Çözünürlük | 1080×1920 ✅ |
+| FPS | 60.0 ✅ (RIFE kullanıldı) |
+| Video / ses codec | h264 / AAC 48 kHz ✅ |
+| Bit hızı | 8.52 Mbps ✅ |
+| faststart (moov önde) | ✅ |
+| Ses yüksekliği | −13.8 LUFS, true peak −1.5 dBFS ✅ |
+| Süre / boyut | 22.0 sn / 23.4 MB ✅ |
+| İlk kare karartılmamış | merkez parlaklık 127 ✅ |
+| Kutu/panel/buton yok | üst/alt bölge keskinliği 0.3 (sadece bulanık arka plan) ✅ |
+| Altyazı güvenli alanda | y≈1290–1420 bandında ✅ (gözle de kontrol edildi) |
+| Kredi görünür | "@E2E_Source" x=60, y=590 ✅ |
+| Caption | "Hard to argue with this once you hear the numbers behind it." + 3 hashtag + `🎥 @E2E_Source` |
 
-Kareler ve tam sonuç: `E2E_DIR` (`frame_0.5s.png`, `frame_middle.png`, `frame_end.png`, `reel.mp4`,
-`e2e_result.json`). Gerçek YouTube indirmesi denendi; **HTTP 403** (aşağıda) yüzünden sentetik video
+Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_middle.png`,
+`frame_end.png`, `reel.mp4`, `e2e_result.json`, `logs/outbox/`). Gerçek YouTube indirmesi denendi; **HTTP 403** (aşağıda) yüzünden sentetik video
 (testsrc + Windows SAPI ile üretilmiş konuşma) kullanıldı — Whisper, altyazı, render, RIFE, QC gerçek
 çalıştı; Qwen yerine mock kullanıldı.
 
@@ -134,7 +156,7 @@ Kareler ve tam sonuç: `E2E_DIR` (`frame_0.5s.png`, `frame_middle.png`, `frame_e
 `sources_manager.py`, `analytics.py`, `reports.py`, `maintenance.py`, `watchdog.py`, `power.py`,
 `jobs.py`, `panel.py`, `synthetic_media.py`, `web/` (yeniden yazıldı: `auth.py`, `views.py`,
 şablonlar), `scripts/` (`init_secrets.py`, `install_autostart.ps1`, `e2e_dry_run.py`, `dev_git.py`),
-`requirements.txt`, `.env.example`, `.gitignore`, `tests/` (TEST_FILES dosya).
+`requirements.txt`, `.env.example`, `.gitignore`, `tests/` (19 test dosyası + yardımcılar).
 
 **Yeniden yazılan:** `ffmpeg_renderer.py`, `rife_interpolator.py`, `qwen_specialized.py`,
 `email_notifier.py`, `models.py` (genişletildi).
@@ -156,6 +178,32 @@ ADB yaklaşımı — hesap riski, geri getirilmemeli), `ig_dashboard.py`, `ig_te
 **DB değişiklikleri** (her biri öncesinde `backups/migrations/` altında yedek): 001 şifre şifreleme,
 002 Instagram şeması, 003 `sectors.music_slug`, 004 eski havuz → `sources` (TRIAL).
 
-**Commit'ler:**
+**Commit'ler** (`python scripts/dev_git.py log`):
 
-COMMITS
+| Commit | İçerik |
+|---|---|
+| 6c7b7c09f5 | Baseline: gece öncesi durum |
+| 1110d847df | Faz 1 güvenlik |
+| ec0bb574a4 | Faz 2 IG formatı, QC, temizlik |
+| b7d613d069 | Faz 3 Ollama istemcisi, GPU kilidi, batch üretim |
+| 57648c8911 | Faz 4 döngü, şema, guardrail, beyin |
+| e575959f9f | Faz 5 Instagram yayıncısı + zamanlayıcı |
+| fbdd34baf8 | Faz 6 yorum yanıtlayıcı |
+| 7bfad71ebc | Faz 7 kaynak keşfi / bandit / hız şeridi |
+| 4e12290052 | Faz 8 analitik |
+| 2d55481ba7 | Faz 9 web paneli |
+| 953c934134 | Faz 10 dayanıklılık |
+| 84a2f3df87 | Faz 11 testler + E2E |
+| (son) | Faz 12 bu rapor |
+
+## 7. Servisleri elle denemek (DRY_RUN açıkken güvenli)
+
+```
+python db_migrate.py                     # şema güncel mi
+python panel.py                          # http://127.0.0.1:5050
+python scripts/e2e_dry_run.py --synthetic
+python -m pytest -q tests
+```
+`cycle_runner.py` / `publish_runner.py` / `comment_responder.py` / `watchdog.py` sürekli çalışan
+servislerdir. Ollama/model hazır değilse cycle_runner üretimi o döngü atlar ve panelde
+`LLM_UNAVAILABLE` alarmı çıkar (mock'a asla düşmez; mock sadece testler ve E2E içindir).

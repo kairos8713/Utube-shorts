@@ -111,6 +111,12 @@ def run_one_cycle(session, now=None, pipeline_factory=None, llm=None) -> dict:
     needs = compute_needs(session, now)
     stats["needs"] = needs
     produced = 0
+    from llm_client import get_llm
+    if needs and not (llm or get_llm()).health():
+        raise_alert("LLM_UNAVAILABLE", f"Qwen/Ollama ({settings.OLLAMA_URL}, model {settings.OLLAMA_MODEL}) is not "
+                    "available — production skipped this cycle", severity="CRITICAL", email=False, session=session)
+        stats["production_skipped"] = "llm unavailable"
+        needs = {}
     if needs:
         import sources_manager
         plan = sources_manager.plan_production(session, needs, now)

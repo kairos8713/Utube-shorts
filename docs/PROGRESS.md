@@ -29,10 +29,9 @@
 | 8 Analytics feedback | DONE | |
 | 9 Web panel | DONE | |
 | 10 Ops / resilience | DONE | autostart script written, NOT run |
-| 11 Tests + E2E dry run | IN PROGRESS | 153 unit tests pass |
-| 12 Morning report | TODO | |
+| 11 Tests + E2E dry run | DONE | 203 tests pass; E2E PASS 13/13 (logs/e2e/20261018T235254Z) |
+| 12 Morning report | DONE | docs/MORNING_REPORT.md |
 
 ## Next step
-Phase 11: scripts/e2e_dry_run.py — temp DB, 1 account, synthetic source → real Whisper → mock Qwen →
-real render + RIFE → QC → queue → simulated publish (DRY_RUN) → simulated comment reply → report;
-ffprobe verification + frame extraction. Then Phase 12 MORNING_REPORT.md.
+All phases done. Remaining work is Emre's checklist in docs/MORNING_REPORT.md §3
+(Ollama + GGUF, Meta app, R2, yt-dlp 403 fix, panel password, autostart).
