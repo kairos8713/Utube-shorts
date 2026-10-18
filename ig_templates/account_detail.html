@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Edit Account: {{ account.ig_account_id }}</h2>
+<br>
+<div style="max-width: 600px;">
+{% include 'account_form.html' %}
+</div>
+
+<div style="display:flex; gap: 2rem; flex-wrap: wrap;">
+    <div style="flex:1; min-width: 300px;">
+        <h3>Pending Videos</h3>
+        <table class="table">
+            <thead><tr><th>Filename</th><th>Size</th><th>Duration</th><th>Action</th></tr></thead>
+            <tbody>
+                {% for vid in pending %}
+                <tr>
+                    <td>{{ vid.name }}</td>
+                    <td>{{ vid.size_mb }} MB</td>
+                    <td>{{ vid.duration }} s</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('delete_pending', acc_id=account.id, filename=vid.name) }}" onsubmit="return confirm('Are you sure?');">
+                            <button type="submit" class="btn btn-danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">No pending videos.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div style="flex:1; min-width: 300px;">
+        <h3>Published Videos</h3>
+        <table class="table">
+            <thead><tr><th>Filename</th><th>Size</th><th>Duration</th></tr></thead>
+            <tbody>
+                {% for vid in published %}
+                <tr>
+                    <td>{{ vid.name }}</td>
+                    <td>{{ vid.size_mb }} MB</td>
+                    <td>{{ vid.duration }} s</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3">No published videos.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

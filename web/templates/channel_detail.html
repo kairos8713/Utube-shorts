@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>/USR/TARGET_ANALYSIS: <span style="color:white;">{{ channel['name'] or 'UNKNOWN' }}</span></h2>
+    <a href="{{ url_for('main.analytics') }}" class="btn btn-primary">
+        &lt;&lt; RETURN_TO_GRID
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card-stat p-4 h-100">
+            <h5 style="color: var(--neon-cyan)">[ IDENTITY_MATRIX ]</h5>
+            <ul style="list-style: none; padding: 0; font-size: 0.95rem; line-height: 1.8;">
+                <li><span class="text-muted">DB_ID:</span> <span class="text-white">#{{ channel['id'] }}</span></li>
+                <li><span class="text-muted">YT_ID:</span> <span class="text-white">{{ channel['youtube_channel_id']
+                        }}</span></li>
+                <li><span class="text-muted">SECTOR:</span> <span style="color: var(--neon-pink)">{{
+                        channel['sector_name'] }}</span></li>
+                <li><span class="text-muted">STATUS:</span>
+                    {% if channel['status'] == 'ACTIVE' %}
+                    <span class="badge bg-success">ONLINE</span>
+                    {% else %}
+                    <span class="badge bg-danger">{{ channel['status'] }}</span>
+                    {% endif %}
+                </li>
+                <li><span class="text-muted">LIMIT:</span> <span class="text-white">{{ channel['daily_limit'] }} /
+                        DAY</span></li>
+                <li><span class="text-muted">TOKEN:</span>
+                    {% if channel['refresh_token'] %}
+                    <span style="color: var(--neon-green);">SECURE_LINK_ESTABLISHED</span>
+                    {% else %}
+                    <span style="color: var(--alert-red);">NO_CONNECTION</span>
+                    {% endif %}
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card-stat p-4 h-100">
+            <h5 style="color: var(--neon-yellow)">[ PERFORMANCE_LOG_30D ]</h5>
+            <div style="overflow-y: auto; max-height: 300px;">
+                <table class="table table-sm table-hover" style="font-size: 0.85rem;">
+                    <thead>
+                        <tr>
+                            <th>TIMESTAMP</th>
+                            <th>VIEWS (+)</th>
+                            <th>SUBS (+)</th>
+                            <th>REVENUE ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in analytics %}
+                        <tr>
+                            <td style="color:#888;">{{ row['date'] }}</td>
+                            <td style="color: var(--neon-cyan)">+{{ "{:,}".format(row['total_views_gained']) }}</td>
+                            <td style="color: var(--neon-green)">+{{ "{:,}".format(row['total_subs_gained']) }}</td>
+                            <td style="color: var(--neon-yellow)">${{ "{:,.2f}".format(row['estimated_revenue']) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted">[ NO_METRICS_DATA_FOUND ]</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card-stat p-4 mt-4">
+    <h5 style="color: var(--neon-green)">[ VIDEO_PERFORMANCE_LOG ]</h5>
+    <table class="table table-hover" style="font-size: 0.9rem;">
+        <thead>
+            <tr>
+                <th>DATE</th>
+                <th>TITLE</th>
+                <th>HYPE</th>
+                <th>VIEWS</th>
+                <th>LIKES</th>
+                <th>CTR</th>
+                <th>AVD</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for up in uploads %}
+            <tr>
+                <td style="color:#888; font-size:0.8rem;">{{ up['upload_date'] }}</td>
+                <td>{{ up['title'][:50] }}...</td>
+                <td>
+                    <span style="border: 1px solid var(--neon-cyan); padding: 2px 6px; color: var(--neon-cyan);">
+                        {{ up['qwen_score'] }}
+                    </span>
+                </td>
+                <td style="color:white;">{{ "{:,}".format(up['views']) }}</td>
+                <td style="color:#ccc;">{{ "{:,}".format(up['likes']) }}</td>
+                <td style="color:var(--neon-yellow);">{{ up['ctr'] }}%</td>
+                <td style="color:#ccc;">{{ up['avg_view'] }}%</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="text-center text-muted">[ NO_METRICS_AVAILABLE ]</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

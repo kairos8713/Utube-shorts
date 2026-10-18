@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>System Status</h2>
+<br>
+<div class="grid" style="grid-template-columns: 1fr 1fr;">
+    <div class="card" style="padding: 1.5rem;">
+        <h3>Daily Production</h3>
+        <p style="color:var(--text-muted); margin-bottom: 1rem;">Latest log: {{ daily.file if daily else 'None' }}</p>
+        {% if daily %}
+        <div class="log-box">{{ daily.summary }}</div>
+        {% else %}
+        <div class="log-box">No logs found.</div>
+        {% endif %}
+    </div>
+    <div class="card" style="padding: 1.5rem;">
+        <h3>Publish on Connect</h3>
+        <p style="color:var(--text-muted); margin-bottom: 1rem;">Latest log: {{ publish.file if publish else 'None' }}</p>
+        {% if publish %}
+        <div class="log-box">{{ publish.summary }}</div>
+        {% else %}
+        <div class="log-box">No logs found.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

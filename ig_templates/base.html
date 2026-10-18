@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IG Reels Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>IG Reels Ops</h1>
+            <nav style="margin:0; border:none; padding:0;">
+                <a href="{{ url_for('dashboard') }}" class="btn">Dashboard</a>
+                <a href="{{ url_for('add_account') }}" class="btn">Add Account</a>
+                <a href="{{ url_for('status') }}" class="btn">System Status</a>
+            </nav>
+        </header>
+        <main>
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    
+    <script>
+        function syncColor(source, targetId) {
+            document.getElementById(targetId).value = source.value;
+        }
+    </script>
+</body>
+</html>

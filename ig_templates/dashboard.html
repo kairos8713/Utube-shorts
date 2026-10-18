@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="stats-bar">
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">Total Accounts</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.active }}</div>
+        <div class="stat-label">Active</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.pending }}</div>
+        <div class="stat-label">Pending Videos</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ stats.published }}</div>
+        <div class="stat-label">Published Videos</div>
+    </div>
+</div>
+
+<div class="grid">
+    {% for acc in accounts %}
+    <a href="{{ url_for('account_detail', acc_id=acc.id) }}" class="card" style="text-decoration:none; color:inherit;">
+        <div class="card-header">
+            <div class="swatch" style="background-color: {{ acc.accent }};"></div>
+            <h3 class="card-title">{{ acc.ig_account_id or 'Unnamed' }}</h3>
+            {% if acc.is_active %}
+                <span class="badge badge-active">Active</span>
+            {% else %}
+                <span class="badge badge-inactive">Inactive</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <div class="card-row">
+                <span>Pending</span>
+                <strong>{{ acc.pending }}</strong>
+            </div>
+            <div class="card-row">
+                <span>Published</span>
+                <strong>{{ acc.published }}</strong>
+            </div>
+        </div>
+        <div class="card-footer">
+            <small style="color:var(--text-muted)">
+                Last Pub: {{ acc.last_published or 'Never' }}
+            </small>
+        </div>
+    </a>
+    {% else %}
+    <p>No accounts found.</p>
+    {% endfor %}
+</div>
+{% endblock %}

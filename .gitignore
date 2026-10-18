@@ -1,0 +1,53 @@
+# ── Secrets (never commit) ───────────────────────────────────────────────────
+.env
+cookies.txt
+client_secret.json
+email_config.json
+tokens/
+sessions/
+*.db
+*.db-journal
+*.sqlite
+
+# ── Backups / logs / runtime state ───────────────────────────────────────────
+backups/
+logs/
+weekly_cycle_status.json
+last_cycle_date.txt
+gpu.lock
+*.lock
+
+# ── Media + work dirs (large, regenerated) ───────────────────────────────────
+downloads/
+segments/
+reels/
+pending/
+published/
+shorts/
+artifacts/
+tts_cache/
+work/
+web/downloads/
+*.mp4
+*.mkv
+*.png
+*.jpg
+*.mp3
+*.wav
+*.m4a
+*.ass
+*.onnx
+*.bin
+*.pkl
+*.gguf
+bg_music/**/*.mp3
+bg_music/**/*.wav
+bg_music/**/*.ogg
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ── Private task notes ───────────────────────────────────────────────────────
+claude_code_instagram_prompt.md

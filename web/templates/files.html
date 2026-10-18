@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>/SYSTEM/ROOT_EXPLORER</h2>
+</div>
+
+<div class="card-stat p-3 mb-3 d-flex gap-2 align-items-center flex-wrap">
+    <div class="text-muted me-auto" style="font-family: 'Fira Code', monospace;">
+        <i class="fas fa-folder-open"></i> /{{ current_path }}
+    </div>
+    
+    <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#newFolderModal">
+        <i class="fas fa-folder-plus"></i> MKDIR
+    </button>
+    
+    <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#newFileModal">
+        <i class="fas fa-file-medical"></i> TOUCH
+    </button>
+    
+    <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#uploadModal">
+        <i class="fas fa-upload"></i> UPLOAD
+    </button>
+</div>
+
+<div class="card-stat p-0">
+    <table class="table table-hover mb-0">
+        <thead>
+            <tr>
+                <th style="width: 50px;">TYPE</th>
+                <th>FILENAME</th>
+                <th>SIZE</th>
+                <th>MODIFIED</th>
+                <th style="text-align: right;">ACTIONS</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if current_path %}
+            <tr style="background-color: rgba(255,255,255,0.05);">
+                <td><i class="fas fa-level-up-alt text-warning"></i></td>
+                <td><a href="{{ url_for('main.file_manager', req_path=parent_path) }}" style="color: #aaa;">.. (PARENT)</a></td>
+                <td>-</td>
+                <td>-</td>
+                <td></td>
+            </tr>
+            {% endif %}
+
+            {% for f in files %}
+            <tr>
+                <td>
+                    {% if f.is_dir %}
+                        <i class="fas fa-folder" style="color: var(--neon-yellow)"></i>
+                    {% else %}
+                        <i class="fas fa-file-code" style="color: var(--neon-cyan)"></i>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if f.is_dir %}
+                        <a href="{{ url_for('main.file_manager', req_path=f.path) }}" style="font-weight: bold; color: white;">{{ f.name }}</a>
+                    {% else %}
+                        <a href="{{ url_for('main.file_manager', req_path=f.path) }}" style="color: #ccc;">{{ f.name }}</a>
+                    {% endif %}
+                </td>
+                <td style="color: var(--text-muted)">{{ (f.size / 1024)|round(1) }} KB</td>
+                <td style="color: var(--text-muted); font-size: 0.8rem;">{{ f.mtime }}</td>
+                
+                <td style="text-align: right;">
+                    <div class="d-flex justify-content-end gap-2">
+                        <form action="{{ url_for('main.delete_file') }}" method="POST" onsubmit="return confirm('WARNING: DELETE {{ f.name }}?');">
+                            <input type="hidden" name="file_path" value="{{ f.path }}">
+                            <button type="submit" class="btn btn-sm btn-danger" style="padding: 2px 8px; font-size: 0.7rem;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="modal fade" id="newFolderModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark border-success text-white">
+      <form action="{{ url_for('main.create_folder') }}" method="POST">
+          <div class="modal-body">
+            <label>FOLDER_NAME:</label>
+            <input type="text" name="folder_name" class="form-control bg-black text-white" required>
+            <input type="hidden" name="parent_path" value="{{ current_path }}">
+          </div>
+          <div class="modal-footer border-0">
+            <button type="submit" class="btn btn-primary">CREATE</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="newFileModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark border-success text-white">
+      <form action="{{ url_for('main.create_file') }}" method="POST">
+          <div class="modal-body">
+            <label>FILE_NAME (with ext):</label>
+            <input type="text" name="file_name" class="form-control bg-black text-white" placeholder="script.py" required>
+            <input type="hidden" name="parent_path" value="{{ current_path }}">
+          </div>
+          <div class="modal-footer border-0">
+            <button type="submit" class="btn btn-success">CREATE</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="uploadModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content bg-dark border-warning text-white">
+      <form action="{{ url_for('main.upload_file') }}" method="POST" enctype="multipart/form-data">
+          <div class="modal-body">
+            <label>SELECT_FILE:</label>
+            <input type="file" name="file" class="form-control bg-black text-white" required>
+            <input type="hidden" name="parent_path" value="{{ current_path }}">
+          </div>
+          <div class="modal-footer border-0">
+            <button type="submit" class="btn btn-warning">UPLOAD</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

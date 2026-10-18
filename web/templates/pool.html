@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="mb-4">Kaynak Havuzu (Pool)</h2>
+
+<div class="card card-stat p-4 mb-4">
+    <h5>🎣 Rakip Kanal Ekle</h5>
+    <form method="POST" class="row g-3">
+        <div class="col-md-8">
+            <input type="text" name="channel_url" class="form-control" placeholder="https://www.youtube.com/@MrBeast"
+                required>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" name="sector_id">
+                <option value="" selected>Sektör...</option>
+                {% for s in sectors %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-success w-100">Havuza At</button>
+        </div>
+    </form>
+</div>
+
+<div class="card card-stat p-4">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Kanal URL</th>
+                <th>Sektör</th>
+                <th>Son Tarama</th>
+                <th>Durum</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in pool_list %}
+            <tr>
+                <td>{{ p['id'] }}</td>
+                <td><a href="{{ p['channel_url'] }}" target="_blank">{{ p['channel_url'] }}</a></td>
+                <td>{{ p['sector_name'] }}</td>
+                <td>{{ p['last_crawled_at'] or 'Henüz Taranmadı' }}</td>
+                <td>
+                    {{ p['status'] }}
+                    <button onclick="deletePoolChannel({{ p['id'] }})"
+                            style="background:#E74C3C;color:white;border:none;
+                                   padding:4px 10px;border-radius:4px;cursor:pointer;
+                                   margin-left:8px;">
+                        🗑️
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+function deletePoolChannel(id) {
+    if (!confirm('Bu pool kanalı silinsin mi?')) return;
+    fetch('/api/pool_channel/' + id + '/delete', {method:'POST'})
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) location.reload();
+        else alert('Hata: ' + d.error);
+    });
+}
+</script>
+{% endblock %}

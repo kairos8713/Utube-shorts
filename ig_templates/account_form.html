@@ -1,0 +1,33 @@
+<form method="POST" class="card" style="padding: 2rem; margin-bottom:2rem;">
+    <div class="form-group">
+        <label class="form-label">IG Account ID / Handle</label>
+        <input type="text" name="ig_account_id" class="form-control" required value="{{ account.ig_account_id if account else '' }}">
+    </div>
+    <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" name="mail" class="form-control" required value="{{ account.mail if account else '' }}">
+    </div>
+    <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" name="password" class="form-control" required value="{{ account.password if account else '' }}">
+    </div>
+    <div class="form-group">
+        <label class="form-label">Channel Pool (one YouTube URL per line)</label>
+        <textarea name="channel_pool" class="form-control" rows="5" required>{{ urls }}</textarea>
+    </div>
+    <div class="form-group">
+        <label class="form-label">Accent Color</label>
+        <div class="color-picker-group">
+            <input type="color" id="colorPicker" value="{{ account.accent_color_1 if account else '#1E90FF' }}" oninput="syncColor(this, 'colorHex')">
+            <input type="text" name="accent_color_1" id="colorHex" class="form-control" value="{{ account.accent_color_1 if account else '#1E90FF' }}" oninput="syncColor(this, 'colorPicker')" style="width: 120px;">
+        </div>
+    </div>
+    <div class="form-group">
+        <label class="form-label">Status (Active)</label>
+        <label class="switch">
+            <input type="checkbox" name="is_active" {% if not account or account.is_active %}checked{% endif %}>
+            <span class="slider"></span>
+        </label>
+    </div>
+    <button type="submit" class="btn">Save Account</button>
+</form>
