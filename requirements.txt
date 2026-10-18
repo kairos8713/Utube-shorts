@@ -1,0 +1,38 @@
+# Instagram Reels pipeline — direct dependencies (pinned to the versions on the
+# production PC, 2026-10-19). Full historical freeze: requirements_working_20260522.txt
+# torch is the CUDA 11.8 build: pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cu118
+
+# web panel
+Flask==3.1.2
+Werkzeug==3.1.4
+
+# data / config / security
+SQLAlchemy==2.0.45
+python-dotenv==1.2.1
+cryptography==50.0.2
+filelock==3.19.1
+tzdata==2025.2
+psutil==7.1.3
+
+# HTTP / Instagram / R2
+requests==2.32.5
+boto3==1.43.114
+
+# media / AI
+yt-dlp==2026.8.19
+yt-dlp-ejs==0.8.0
+openai-whisper==20250625
+torch==2.3.1
+numpy==1.26.4
+scipy==1.16.3
+opencv-python==4.9.0.80
+pillow==11.3.0
+ImageHash==4.3.2
+librosa==0.10.1
+soundfile==0.13.1
+sk-video==1.1.10        # Practical-RIFE
+tqdm==4.67.1            # Practical-RIFE
+
+# dev / tests
+pytest==9.1.1
+dulwich==1.2.17         # git without a system git install (scripts/dev_git.py)

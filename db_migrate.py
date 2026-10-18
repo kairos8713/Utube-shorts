@@ -111,11 +111,26 @@ def m002_instagram_schema(conn):
 
 
 def m003_sector_niche_slug(conn):
+    """sectors.music_slug → bg_music/<slug>/ ; filled when a folder matches the name."""
+    from media_utils import available_music_slugs, music_slug
+
+    if not _table_exists(conn, "sectors"):
+        return
     add_column(conn, "sectors", "music_slug", "VARCHAR")
+    folders = set(available_music_slugs())
+    aliases = {"tech__ai_riskli": "tech_ai_riskli", "food__cooking_riskli": "food_cooking_riskli",
+               "automative_riskli": "automotive_riskli"}
+    for sid, name, current in conn.execute("SELECT id, name, music_slug FROM sectors").fetchall():
+        if current:
+            continue
+        slug = aliases.get(music_slug(name), music_slug(name))
+        if slug in folders:
+            conn.execute("UPDATE sectors SET music_slug=? WHERE id=?", (slug, sid))
 
 
 MIGRATIONS = [
     ("001_encrypt_owned_passwords", m001_encrypt_owned_passwords),
+    ("003_sector_music_slug", m003_sector_niche_slug),
 ]
 
 

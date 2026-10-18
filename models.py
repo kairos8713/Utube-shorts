@@ -32,6 +32,7 @@ class Sectors(Base):
     description = Column(String, nullable=False)
     tags = Column(String, nullable=False)
     voices_path = Column(String, nullable=True)
+    music_slug = Column(String, nullable=True)     # bg_music/<slug>/
 
 class OwnedChannels(Base):
     """IG accounts owned by us — one per sector rotation slot."""

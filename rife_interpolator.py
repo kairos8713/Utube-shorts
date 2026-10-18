@@ -1,48 +1,58 @@
+"""
+rife_interpolator.py — Practical-RIFE frame interpolation, 30 fps → 60 fps.
+
+Uses `--multi 2 --fps 60`. Passing --fps explicitly makes inference_video.py
+skip its own (moviepy-based) audio transfer; audio is muxed later by
+ffmpeg_renderer.finalize_reel() from the 30 fps base render.
+
+Output is OpenCV mp4v, video-only, 1080×1920 — always re-encoded afterwards.
+The caller must hold the GPU lock (gpu_lock.gpu_job).
+"""
 import os
 import subprocess
+import sys
 import time
 
-ENABLE_RIFE_INTERPOLATION = True  # render is 24fps, interpolate to 72fps (--multi 3)
+from log_setup import get_logger
+
+log = get_logger("rife")
+
+ENABLE_RIFE_INTERPOLATION = True
+RIFE_MULTI = 2           # 30 fps × 2 = 60 fps
+RIFE_TARGET_FPS = 60
+RIFE_TIMEOUT_S = 1800
+RIFE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Practical-RIFE")
+
+
+def rife_available() -> bool:
+    return (ENABLE_RIFE_INTERPOLATION
+            and os.path.exists(os.path.join(RIFE_DIR, "inference_video.py"))
+            and os.path.exists(os.path.join(RIFE_DIR, "train_log", "flownet.pkl")))
+
 
 def apply_rife_interpolation(input_mp4: str, output_mp4: str) -> bool:
-    """
-    Executes Practical-RIFE inference to interpolate a 24fps video to 72fps.
-    Uses --multi 3 (RIFE v4.25 supports arbitrary multi via direct interpolation).
-    Input is 1080x1920 (native resolution, no ESRGAN upscale).
-
-    Output is MPEG-4 Part 2 (mp4v via OpenCV), video-only (no audio).
-    A final re-encode via burn_overlays_ffmpeg() is mandatory.
-    """
-    if not ENABLE_RIFE_INTERPOLATION:
-        print("[RIFE] Skipped (ENABLE_RIFE_INTERPOLATION=False)")
+    if not rife_available():
+        log.warning("RIFE not available (disabled or model missing at %s)", RIFE_DIR)
         return False
-
-    rife_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Practical-RIFE")
-    inference_script = os.path.join(rife_dir, "inference_video.py")
-    
-    if not os.path.exists(inference_script):
-        print(f"[RIFE ERROR] Practical-RIFE not found at {rife_dir}")
-        return False
-
-    multi = 3       # 24fps x 3 = 72fps (RIFE v4.25 direct interpolation)
-    target_fps = 72
-    print(f"\n[RIFE] Interpolating to {target_fps}fps (multi={multi}): {os.path.basename(input_mp4)}")
     t0 = time.time()
-    
     cmd = [
-        "python", "inference_video.py",
-        "--video", input_mp4,
-        "--output", output_mp4,
-        "--multi", str(multi),
+        sys.executable, "inference_video.py",
+        "--video", os.path.abspath(input_mp4),
+        "--output", os.path.abspath(output_mp4),
+        "--multi", str(RIFE_MULTI),
+        "--fps", str(RIFE_TARGET_FPS),
         "--scale", "1.0",
         "--ext", "mp4",
     ]
-    
+    log.info("RIFE ×%d → %dfps: %s", RIFE_MULTI, RIFE_TARGET_FPS, os.path.basename(input_mp4))
     try:
-        subprocess.run(cmd, cwd=rife_dir, check=True)
-        elapsed = time.time() - t0
-        print(f"[RIFE] OK Interpolation complete in {elapsed:.1f}s: {os.path.basename(output_mp4)}")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"[RIFE ERROR] Inference failed: {e}")
+        r = subprocess.run(cmd, cwd=RIFE_DIR, capture_output=True, text=True, timeout=RIFE_TIMEOUT_S,
+                           encoding="utf-8", errors="replace")
+    except subprocess.TimeoutExpired:
+        log.error("RIFE timed out after %ss", RIFE_TIMEOUT_S)
         return False
+    if r.returncode != 0 or not os.path.exists(output_mp4) or os.path.getsize(output_mp4) < 1000:
+        log.error("RIFE failed (exit %s): %s", r.returncode, (r.stderr or "")[-2000:])
+        return False
+    log.info("RIFE done in %.1fs", time.time() - t0)
+    return True
