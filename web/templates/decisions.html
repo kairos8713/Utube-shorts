@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Karar günlüğü{% endblock %}
+{% block content %}
+<h1>Karar günlüğü</h1>
+<form class="card" method="get">
+  <select name="task"><option value="">tüm görevler</option>
+    {% for t in tasks %}<option value="{{ t }}" {{ 'selected' if f.task == t else '' }}>{{ t }}</option>{% endfor %}</select>
+  <select name="applied"><option value="">hepsi</option>
+    <option value="1" {{ 'selected' if f.applied == '1' else '' }}>uygulanan</option>
+    <option value="0" {{ 'selected' if f.applied == '0' else '' }}>reddedilen</option></select>
+  <input name="account" placeholder="hesap #" value="{{ f.account or '' }}" size="6">
+  <button type="submit">Filtrele</button>
+</form>
+<div class="table-wrap card"><table>
+<tr><th>Zaman</th><th>Görev</th><th>Hesap</th><th>Önerilen eylem</th><th>Gerekçe</th><th>Doğrulama</th><th>Uygulandı</th></tr>
+{% for d in rows %}
+<tr><td>{{ d.created_at|local }}</td><td>{{ d.task }}</td><td>{{ d.owned_channel_id or '—' }}</td>
+  <td><pre>{{ d.proposed_action }}</pre></td><td>{{ d.reason or '' }}</td>
+  <td><span class="badge {{ 'ok' if d.validation == 'OK' else 'danger' }}">{{ d.validation }}</span></td>
+  <td>{{ 'evet' if d.applied else 'hayır' }}</td></tr>
+{% else %}<tr><td colspan="7" class="muted">Kayıt yok.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

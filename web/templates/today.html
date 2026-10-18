@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Bugünün planı{% endblock %}
+{% block content %}
+<h1>Bugünün planı <span class="muted">({{ day }}, Europe/Warsaw)</span></h1>
+<div class="table-wrap card"><table>
+<tr><th>Saat</th><th>Hesap</th><th>Video</th><th>Durum</th><th>Dilim kaynağı</th></tr>
+{% for r in rows %}
+<tr><td>{{ r.time }}</td><td>{{ names.get(r.account_id, r.account_id) }}</td><td>#{{ r.video_id }}
+  {% if r.priority %}<span class="badge warn">hız şeridi</span>{% endif %}</td>
+  <td>{{ r.status }}</td>
+  <td><span class="badge {{ 'ok' if r.slot_source == 'qwen' else '' }}">{{ r.slot_source or '—' }}</span></td></tr>
+{% else %}
+<tr><td colspan="5" class="muted">Bugün için planlanmış paylaşım yok.</td></tr>
+{% endfor %}
+</table></div>
+{% endblock %}

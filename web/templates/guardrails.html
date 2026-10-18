@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Guardrail'ler{% endblock %}
+{% block content %}
+<h1>Guardrail'ler <span class="muted">(salt okunur — kodda sabit, Qwen değiştiremez)</span></h1>
+<div class="table-wrap card"><table>
+<tr><th>Ad</th><th>Değer</th><th>Açıklama</th></tr>
+{% for name, value, text in rows %}<tr><td><code>{{ name }}</code></td><td>{{ value }}</td><td>{{ text }}</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

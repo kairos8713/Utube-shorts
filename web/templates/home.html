@@ -1,5 +1,53 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Ana sayfa</h1>
-<div class="card muted">Panel kuruluyor.</div>
+{% if status.emergency %}
+  <div class="alert danger"><strong>ACİL DURDURMA ETKİN</strong> — yayın, yanıt ve gizleme yapılmıyor.</div>
+{% endif %}
+{% if alerts %}
+  <h2>Alarmlar</h2>
+  {% for a in alerts %}
+    <div class="alert {{ 'danger' if a.severity == 'CRITICAL' else ('warn' if a.severity == 'WARNING' else 'info') }}">
+      <strong>{{ a.kind }}</strong> · {{ a.created_at|local }}<br>{{ a.message }}
+      <form class="inline" method="post" action="{{ url_for('main.alert_resolve', alert_id=a.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button type="submit">Çözüldü</button>
+      </form>
+    </div>
+  {% endfor %}
+{% endif %}
+
+<div class="card">
+  {% if not status.emergency %}
+  <form method="post" action="{{ url_for('main.emergency') }}"
+        onsubmit="return confirm('Tüm dış eylemler durdurulsun mu?');">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="stop">
+    <label>Onay için <code>DURDUR</code> yazın: <input name="confirm" autocomplete="off" required></label>
+    <button class="btn danger big" type="submit">ACİL DURDURMA</button>
+  </form>
+  {% else %}
+  <form method="post" action="{{ url_for('main.emergency') }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="clear">
+    <label>Devam etmek için <code>DEVAM</code> yazın: <input name="confirm" autocomplete="off" required></label>
+    <button class="btn primary" type="submit">Durdurmayı kaldır</button>
+  </form>
+  {% endif %}
+</div>
+
+<h2>Sistem durumu {% if status.dry_run %}<span class="badge warn">DRY_RUN</span>{% endif %}</h2>
+<div class="grid">
+  {% for s in status.services %}
+  <div class="card stat"><div class="k">{{ s.name }}</div>
+    <div class="v"><span class="badge {{ 'ok' if s.ok else 'danger' }}">{{ 'çalışıyor' if s.ok else 'yanıt yok' }}</span></div>
+    <div class="muted">son: {{ s.last }}</div></div>
+  {% endfor %}
+  <div class="card stat"><div class="k">GPU işi</div>
+    <div class="v">{{ status.gpu.job if status.gpu else 'boşta' }}</div></div>
+  <div class="card stat"><div class="k">Kuyruk (bekleyen / tutulan / hatalı)</div>
+    <div class="v">{{ status.queue.PENDING }} / {{ status.queue.HELD }} / {{ status.queue.FAILED }}</div></div>
+  <div class="card stat"><div class="k">Boş disk</div>
+    <div class="v"><span class="badge {{ 'danger' if status.disk_free_pct < 10 else 'ok' }}">{{ status.disk_free_pct }}%</span></div>
+    <div class="muted">{{ status.disk_free_gb }} GB</div></div>
+</div>
 {% endblock %}

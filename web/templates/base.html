@@ -61,7 +61,11 @@ pre { white-space: pre-wrap; word-break: break-word; }
 {% if session.get('logged_in') %}
 <header><nav>
   <a class="brand" href="{{ url_for('main.home') }}">Reels Kontrol</a>
-  {% block nav %}{% endblock %}
+  {% for ep, label in [('main.accounts','Hesaplar'),('main.today','Bugünün planı'),('main.sources','Kaynaklar'),
+                       ('main.reports','Raporlar'),('main.decisions','Karar günlüğü'),('main.comments','Yorumlar'),
+                       ('main.guardrails_page','Guardrail')] %}
+    <a href="{{ url_for(ep) }}" class="{{ 'active' if request.endpoint == ep else '' }}">{{ label }}</a>
+  {% endfor %}
   <span class="spacer"></span>
   <a href="{{ url_for('auth.logout') }}">Çıkış</a>
 </nav></header>

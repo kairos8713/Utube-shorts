@@ -8,6 +8,7 @@
       <code>python scripts/init_secrets.py --set-panel-password</code></div>
   {% endif %}
   <form method="post">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <p><input name="username" placeholder="Kullanıcı adı" autocomplete="username" required style="width:100%"></p>
     <p><input name="password" type="password" placeholder="Şifre" autocomplete="current-password" required style="width:100%"></p>
     <button class="btn primary" type="submit">Giriş yap</button>

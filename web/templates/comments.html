@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Yorumlar{% endblock %}
+{% block content %}
+<h1>Dikkat gerektiren yorumlar</h1>
+<div class="table-wrap card"><table>
+<tr><th>Zaman</th><th>Hesap</th><th>Kullanıcı</th><th>Yorum</th><th>Neden</th><th></th></tr>
+{% for c in risky %}
+<tr><td>{{ c.commented_at|local }}</td><td>{{ c.owned_channel_id }}</td><td>{{ c.username }}</td><td>{{ c.text }}</td>
+  <td>{{ c.class_reason }}</td>
+  <td>{% if not c.attention_resolved %}<form method="post" action="{{ url_for('main.comment_resolve', cid=c.id) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button type="submit">İlgilendim</button></form>
+    {% else %}<span class="badge ok">çözüldü</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">Yok.</td></tr>{% endfor %}
+</table></div>
+
+<h2>Yanıt geçmişi</h2>
+<div class="table-wrap card"><table>
+<tr><th>Planlanan</th><th>Gönderilen</th><th>Hesap</th><th>Yorum</th><th>Yanıt</th><th>Durum</th></tr>
+{% for r in replies %}
+<tr><td>{{ r.scheduled_for|local }}</td><td>{{ r.sent_at|local }}</td><td>{{ r.owned_channel_id }}</td>
+  <td>{{ texts.get(r.comment_id, '') }}</td><td>{{ r.text }}</td>
+  <td>{{ r.status }}{% if r.block_reason %}<br><span class="muted">{{ r.block_reason }}</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="6" class="muted">Yok.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

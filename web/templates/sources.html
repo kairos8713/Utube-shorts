@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Kaynaklar{% endblock %}
+{% block content %}
+<h1>Kaynak havuzu</h1>
+<p>{% for st in ['', 'TRIAL', 'ACTIVE', 'REJECTED', 'BLACKLISTED', 'CANDIDATE'] %}
+  <a class="btn {{ 'primary' if (status or '') == st else '' }}" href="{{ url_for('main.sources', status=st or None) }}">{{ st or 'Tümü' }}</a>
+{% endfor %}</p>
+<div class="table-wrap card"><table>
+<tr><th>Kanal</th><th>Niş</th><th>Durum</th><th>Puan</th><th>Abone / ort. izlenme</th><th>Konuşma / doygunluk</th>
+    <th>Bandit (α/β)</th><th>Yayınlanan</th><th></th></tr>
+{% for s in rows %}
+<tr><td><a href="{{ s.channel_url }}" target="_blank" rel="noopener">{{ s.handle or s.channel_url }}</a>
+      <br><span class="muted">{{ s.status_reason or '' }}</span></td>
+  <td>{{ sectors.get(s.sector_id, '—') }}</td>
+  <td><span class="badge {{ 'ok' if s.status == 'ACTIVE' else ('danger' if s.status == 'BLACKLISTED' else 'warn' if s.status == 'TRIAL' else '') }}">{{ s.status }}</span></td>
+  <td>{{ '%.2f'|format(s.score) if s.score is not none else '—' }}</td>
+  <td>{{ s.subscribers or '—' }} / {{ s.avg_views|int if s.avg_views else '—' }}</td>
+  <td>{{ '%.2f'|format(s.speech_ratio) if s.speech_ratio is not none else '—' }} / {{ s.saturation if s.saturation is not none else '—' }}</td>
+  <td>{{ s.bandit_alpha|round(1) }}/{{ s.bandit_beta|round(1) }}</td>
+  <td>{{ s.clips_published or 0 }}</td>
+  <td>{% if s.status != 'BLACKLISTED' %}
+    <form method="post" action="{{ url_for('main.source_blacklist', src_id=s.id) }}" onsubmit="return confirm('Kara listeye alınsın mı?');">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button type="submit">Kara liste</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="9" class="muted">Kaynak yok.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

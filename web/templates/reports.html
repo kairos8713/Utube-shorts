@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Raporlar{% endblock %}
+{% block content %}
+<h1>Döngü raporu</h1>
+{% if not rep %}<div class="card muted">Henüz rapor yok.</div>{% else %}
+<p class="muted">#{{ rep.id }} · {{ stats.window.since }} → {{ stats.window.until }} (Warsaw)</p>
+
+<h2>Dikkat gerektirenler</h2>
+{% for a in stats.attention %}
+  <div class="alert {{ 'danger' if a.severity == 'CRITICAL' else 'warn' }}"><strong>{{ a.kind }}</strong> {{ a.at }} — {{ a.message }}</div>
+{% else %}<div class="card muted">Yok.</div>{% endfor %}
+
+<h2>Özet</h2>
+<div class="grid">
+  {% for k, label in [('produced','Üretilen'),('published','Yayınlanan'),('failed','Hatalı yayın'),('render_failed','Render hatası'),('dry_run_posts','DRY_RUN yayını')] %}
+  <div class="card stat"><div class="k">{{ label }}</div><div class="v">{{ stats.summary[k] or 0 }}</div></div>
+  {% endfor %}
+</div>
+<div class="card"><pre>{{ rep.narrative }}</pre></div>
+
+<h2>Hesaplar</h2>
+<div class="table-wrap card"><table>
+<tr><th>Hesap</th><th>Durum</th><th>Paylaşım</th><th>Takipçi (Δ)</th><th>Ort. göreli izlenme</th><th>Ülkeler</th></tr>
+{% for a in stats.accounts %}
+<tr><td>{{ a.name }}</td><td>{{ a.status }}{% if a.pause_reason %}<br><span class="muted">{{ a.pause_reason }}</span>{% endif %}</td>
+  <td>{{ a.posts }}</td><td>{{ a.followers or '—' }} ({{ a.followers_delta if a.followers_delta is not none else '—' }})</td>
+  <td>{{ a.mean_relative_views or '—' }}</td>
+  <td>{% for c, v in a.top_countries %}{{ c }} {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
+{% endfor %}
+</table></div>
+
+<h2>Qwen'in kararları</h2>
+<div class="card"><p>{{ rep.decision_summary }}</p>
+<div class="table-wrap"><table><tr><th>Görev</th><th>Uygulanan</th><th>Reddedilen</th></tr>
+{% for t, c in stats.decisions.by_task.items() %}<tr><td>{{ t }}</td><td>{{ c.applied or 0 }}</td><td>{{ c.rejected or 0 }}</td></tr>{% endfor %}
+</table></div>
+{% for d in stats.decisions.notable %}<p class="muted"><strong>{{ d.task }}</strong> {{ d.validation }} — {{ d.reason }}</p>{% endfor %}
+</div>
+
+<h2>En iyi / en kötü videolar</h2>
+<div class="grid">
+  <div class="card"><strong>En iyi</strong>{% for v in stats.best_videos %}<br>{{ v.relative }}× · {{ v.topic }} {% if v.permalink %}<a href="{{ v.permalink }}">reel</a>{% endif %}{% endfor %}</div>
+  <div class="card"><strong>En kötü</strong>{% for v in stats.worst_videos %}<br>{{ v.relative }}× · {{ v.topic }}{% endfor %}</div>
+  <div class="card"><strong>En iyi kaynaklar</strong>{% for s in stats.best_sources %}<br>{{ s.source }} {{ s.mean_relative }}× (n={{ s.n }}){% endfor %}</div>
+  <div class="card"><strong>En kötü kaynaklar</strong>{% for s in stats.worst_sources %}<br>{{ s.source }} {{ s.mean_relative }}×{% endfor %}</div>
+</div>
+
+<h2>Saat seçimi: Qwen vs keşif</h2>
+<div class="card table-wrap"><table><tr><th>Dilim kaynağı</th><th>Paylaşım</th><th>Ort. göreli izlenme</th></tr>
+{% for k, v in stats.slot_comparison.items() %}<tr><td>{{ k }}</td><td>{{ v.n }}</td><td>{{ v.mean_relative }}</td></tr>{% else %}
+<tr><td colspan="3" class="muted">Henüz yeterli veri yok.</td></tr>{% endfor %}</table></div>
+{% endif %}
+
+<h2>Arşiv</h2>
+<div class="card">{% for r in archive %}<a href="{{ url_for('main.reports', rep_id=r.id) }}">#{{ r.id }} {{ r.created_at|local }}</a>{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</div>
+{% endblock %}

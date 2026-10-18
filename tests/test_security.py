@@ -84,6 +84,26 @@ def test_init_secrets_password_hash_is_quoted(tmp_path):
 
 # ── panel auth ───────────────────────────────────────────────────────────────
 
+class CsrfClient:
+    """Wraps the Flask test client and adds the session CSRF token to every POST."""
+
+    def __init__(self, c):
+        self.c = c
+
+    def token(self):
+        self.c.get("/login")
+        with self.c.session_transaction() as s:
+            return s.get("_csrf")
+
+    def post(self, url, data=None, **kw):
+        data = dict(data or {})
+        data.setdefault("_csrf", self.token())
+        return self.c.post(url, data=data, **kw)
+
+    def __getattr__(self, name):
+        return getattr(self.c, name)
+
+
 @pytest.fixture
 def client(monkeypatch):
     from web import auth, create_app
@@ -91,7 +111,7 @@ def client(monkeypatch):
     monkeypatch.setenv("PANEL_USERNAME", "emre")
     monkeypatch.setenv("PANEL_PASSWORD_HASH", generate_password_hash("s3cret-pass!"))
     app = create_app(testing=True)
-    return app.test_client()
+    return CsrfClient(app.test_client())
 
 
 def test_panel_defaults_to_localhost():
@@ -103,7 +123,7 @@ def test_login_disabled_without_hash(monkeypatch):
     from web import auth, create_app
     auth.reset_rate_limit()
     monkeypatch.setenv("PANEL_PASSWORD_HASH", "")
-    c = create_app(testing=True).test_client()
+    c = CsrfClient(create_app(testing=True).test_client())
     r = c.post("/login", data={"username": "emre", "password": ""})
     assert r.status_code == 200 and "ayarlanmamış".encode() in r.data
     assert c.get("/").status_code == 302
