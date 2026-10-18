@@ -21,8 +21,8 @@
 | 2 Cleanup + IG format | DONE | commit ec0bb574a4; real RIFE run verified 60fps/8.9Mbps/-14.4 LUFS |
 | 3 Qwen/Ollama + GPU lock | DONE (Ollama BLOKE) | client+Modelfile+mock; no Ollama/GGUF on PC |
 | 4 3-day cycle, schema, guardrails, brain | DONE | real DB migrated (002, 004) |
-| 5 IG publisher + scheduler | IN PROGRESS | |
-| 6 Comment responder | TODO | |
+| 5 IG publisher + scheduler | DONE | docs verified (D-020); default upload r2_url; publish_runner.py |
+| 6 Comment responder | IN PROGRESS | |
 | 7 Source discovery / fast lane | TODO | |
 | 8 Analytics feedback | TODO | |
 | 9 Web panel | TODO | |
@@ -31,7 +31,6 @@
 | 12 Morning report | TODO | |
 
 ## Next step
-Phase 5: verify Meta docs (web) → DECISIONS; instagram/client.py, oauth.py, uploader (resumable + r2),
-publisher (container→poll→publish, double-publish guard, auto-pause), token refresh job,
-scheduler.py (slot table, Qwen plan, 25% explore, 8-min gap, missed posts), publish_runner.py.
-Pending modules referenced by cycle_runner: sources_manager (Ph7), scheduler (Ph5), reports (Ph9).
+Phase 6: comment_responder.py (poll 10 min, classify, rules, reply filter, 40–70 min delay, hide spam).
+Still to write: sources_manager (Ph7: cycle_maintenance, plan_production, performance_summary,
+fast_lane, blacklist_source), analytics.collect_due (Ph8), reports (Ph9), maintenance (Ph10).

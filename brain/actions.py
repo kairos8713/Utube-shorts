@@ -69,7 +69,8 @@ def v_slot_assign(session, a, ctx):
     if errs:
         return errs
     slots = a.get("slots")
-    valid = set(ctx.get("valid_slots", []))
+    per_acc = ctx.get("valid_slots_by_account") or {}
+    valid = set(per_acc.get(acc.id, ctx.get("valid_slots", [])))
     if not isinstance(slots, list) or not (1 <= len(slots) <= 4):
         return ["slots must be a list of 1-4 slot keys"]
     bad = [s for s in slots if not _int(s) or (valid and s not in valid)]

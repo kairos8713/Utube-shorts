@@ -123,6 +123,38 @@ Format: **Karar / Gerekçe / Alternatif**. Decisions taken unattended overnight 
 ## D-019 SQLite in WAL mode
 - **Karar:** Five processes share `automation.db`; engine uses WAL + 30 s busy timeout.
 
+## D-020 Instagram API — verified against Meta docs (2026-10-19, web)
+Sources: developers.facebook.com → instagram-platform/content-publishing, ig-user/media, ig-container,
+ig-user/media_publish, ig-user/content_publishing_limit, instagram-media, instagram-media/insights,
+instagram-user/insights, business-login, refresh_access_token, access_token, comment-moderation;
+graph-api/changelog (v26.0 released 2026-07-29).
+
+| Item | Verified result | Used in code |
+|---|---|---|
+| API version | Graph latest **v26.0**; Instagram docs examples still show v25.0 | pinned `IG_API_VERSION=v25.0` (the version the IG docs were checked against); bump to v26.0 after a manual test |
+| Host | Instagram Login → `graph.instagram.com` | ✔ |
+| Reels flow | `POST /{ig-user-id}/media` (`media_type=REELS`, `video_url`, `caption`, `share_to_feed`, `cover_url` or `thumb_offset` [ms]) → `GET /{container}?fields=status_code` (`IN_PROGRESS/FINISHED/ERROR/EXPIRED/PUBLISHED`) → `POST /{ig-user-id}/media_publish creation_id` → media id | ✔ |
+| Polling | "once per minute, for no more than 5 minutes"; containers expire after 24 h | poll 30 s→60 s, `IG_POLL_TIMEOUT_S=600` (Reels processing can exceed 5 min; EXPIRED handled) |
+| Resumable upload | **"Only for apps that have implemented Facebook Login for Business"** (rupload.facebook.com) | default **`IG_UPLOAD_METHOD=r2_url`**; resumable path implemented per docs but expected to fail with Instagram Login (marked) |
+| Caption | max 2200 chars, 30 hashtags, 20 @tags | ✔ (we use 3–5 tags, 1 @) |
+| Publish limit | conflicting: guide says 100/24 h, reference says 50 (`content_publishing_limit` → `quota_usage`, `config.quota_total`) | checked before publish; we post ≤2/day anyway |
+| Container limit | 400 containers / 24 h | n/a |
+| OAuth | `https://www.instagram.com/oauth/authorize?client_id&redirect_uri&response_type=code&scope&state`; code valid 1 h, strip trailing `#_`; `POST https://api.instagram.com/oauth/access_token` (form, `grant_type=authorization_code`) | ✔ |
+| Long-lived token | `GET graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret&access_token`, 60 days | ✔ |
+| Refresh | `GET graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token`; token must be ≥24 h old and unexpired; new 60 days | ✔ (refresh at <10 days left) |
+| Scopes | `instagram_business_basic`, `instagram_business_content_publish`, `instagram_business_manage_comments`, `instagram_business_manage_insights` | ✔ |
+| Comments | `GET /{media}/comments`, `POST /{comment}/replies {message}`, `POST /{comment}` hide/unhide | ✔; **hide parameter name `hide=true` NOT verified** (from memory) |
+| Reels insights | valid: `views` (in development), `reach`, `likes`, `comments`, `shares`, `saved`, `total_interactions`, `ig_reels_avg_watch_time`; deprecated: `plays`, `impressions`, `clips_replays_count`, `ig_reels_aggregated_all_plays_count` | ✔ |
+| Account insights | `reach` (day), `follower_demographics` (lifetime, timeframe, breakdown=country, ≥100 followers); `online_followers` not in the current table → optional | follower count from `GET /me?fields=followers_count` (**field not re-verified**) |
+| Copyright | container `copyright_check_status {status, matches_found}`; media `copyright_check_information` | publish aborted + source blacklisted if `matches_found=true` |
+| Video spec | MP4/MOV, moov at front, H.264/HEVC closed GOP 4:2:0, 23–60 fps, ≤25 Mbps VBR, AAC ≤48 kHz 1–2 ch, 3 s–15 min, ≤300 MB | our 1080×1920/60/8 Mbps/AAC 48k/faststart matches |
+| Deprecation headers | not documented on these pages | client scans response headers for `deprecat`/`sunset`/`warning` (best effort, unverified) |
+
+Error classification (codes from general Graph API knowledge, **not re-verified tonight**):
+190 → AUTH; 10 / 200–299 → PERMISSION; 4, 17, 32, 613, 80002 → RATE_LIMIT; subcode 2207042 →
+PUBLISH_LIMIT; 368 / subcode 2207051 / "spam"/"blocked"/"restricted" → ACTION_BLOCKED;
+5xx, 1, 2 → TRANSIENT; 9007 / 2207027 → NOT_READY.
+
 ## D-010 requirements
 - **Karar:** No `requirements.txt` existed; created a curated UTF-8 one (pinned to installed
   versions). The old UTF-16 freeze `requirements_working_20260522.txt` was converted to UTF-8.

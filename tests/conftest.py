@@ -32,6 +32,8 @@ os.environ.update({
     "IG_APP_ID": "test-app",
     "IG_APP_SECRET": "test-secret",
     "SMTP_PASSWORD": "",
+    "LLM_BACKEND": "mock",
+    "IG_UPLOAD_METHOD": "r2_url",
 })
 
 import pytest  # noqa: E402

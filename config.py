@@ -62,8 +62,8 @@ _SPEC = {
     "IG_APP_ID":             (str, ""),
     "IG_APP_SECRET":         (str, ""),
     "IG_REDIRECT_URI":       (str, "https://localhost:5050/oauth/instagram/callback"),
-    "IG_API_VERSION":        (str, "v24.0"),
-    "IG_UPLOAD_METHOD":      (str, "resumable"),      # resumable | r2_url
+    "IG_API_VERSION":        (str, "v25.0"),          # verified 2026-10-19; v26.0 is newest Graph version
+    "IG_UPLOAD_METHOD":      (str, "r2_url"),         # r2_url | resumable (resumable = Facebook Login only per docs)
     "IG_POLL_TIMEOUT_S":     (int, "600"),
     # ── R2 / S3 temporary hosting (IG_UPLOAD_METHOD=r2_url) ─────────────────
     "R2_ENDPOINT_URL":       (str, ""),

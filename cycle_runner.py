@@ -171,7 +171,20 @@ def main():
             session.close()
         while utcnow() < end:
             system_state.heartbeat("cycle_runner")
+            idle_jobs()
             time.sleep(300)
+
+
+def idle_jobs():
+    """Between cycles: the 6-hourly fast lane (new uploads of strong sources)."""
+    import jobs
+    import models
+    s = models.Session()
+    try:
+        import sources_manager
+        jobs.run_if_due("fast_lane", _dt.timedelta(hours=6), lambda: sources_manager.fast_lane(s), session=s)
+    finally:
+        s.close()
 
 
 if __name__ == "__main__":
