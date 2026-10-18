@@ -139,6 +139,21 @@ def download_youtube_video(url: str, out_dir: str = None, max_height: int = 1080
     return video_path
 
 
+def download_audio_sample(url: str, start: int = 60, end: int = 240, out_dir: str = None) -> str:
+    """A few minutes of audio only (source scoring: speech ratio + language)."""
+    out_dir = out_dir or os.path.join(settings.WORK_DIR, "samples")
+    os.makedirs(out_dir, exist_ok=True)
+    out = os.path.join(out_dir, f"{video_id_from_url(url)}_{start}_{end}.m4a")
+    if os.path.exists(out):
+        return out
+    cmd = _base_args() + ["-f", "bestaudio[ext=m4a]/bestaudio", "--download-sections", f"*{start}-{end}",
+                          "--no-playlist", "-o", out, url]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace")
+    if r.returncode != 0 or not os.path.exists(out):
+        raise classify_ytdlp_error(r.stderr)
+    return out
+
+
 def _wait_stable(path: str, timeout: float = 60):
     """Windows may hold file locks right after the mux step; wait for a stable size."""
     deadline = time.time() + timeout
