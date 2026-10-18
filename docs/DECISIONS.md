@@ -97,6 +97,32 @@ Format: **Karar / Gerekçe / Alternatif**. Decisions taken unattended overnight 
   auto-detected; non-English sources are skipped.
 - **Gerekçe:** Required by the strict batch order (Whisper stage fully before Qwen stage).
 
+## D-015 "Daily" caps are rolling 24 h
+- **Karar:** Post caps, reply/day and hide/day caps count the last 24 h, not calendar days.
+- **Gerekçe:** The posting window (15:00–05:00 Warsaw) crosses midnight; a calendar day would allow
+  2 posts within a few hours around 00:00.
+
+## D-016 Account status transitions
+- **Karar:** `WARMUP → ACTIVE` happens automatically in code once a token exists and
+  `ig_setup_completed_at + 2 days` has passed (this is the warm-up gate, not an un-pause).
+  Qwen's `account_pause` sets `PAUSED_AUTO`; nothing in code (and no Qwen action) can move a
+  paused account back to ACTIVE — only the panel's "Devam" button.
+- **Karar:** Production only fills inventory for accounts where Emre entered
+  `ig_setup_completed_at` (ACTIVE or WARMUP).
+
+## D-017 Perceptual hash = 4 source frames, all must match
+- **Karar:** pHash of 4 frames (20/40/60/80 %) of the *source* clip; a duplicate only if all four
+  are within 6 bits. Plus URL + time-range overlap (±2 s). Checked before render, after render,
+  and again at publish time across accounts.
+- **Gerekçe:** Single-frame hashes flag every clip of a podcast as identical (same studio shot).
+
+## D-018 Legacy pool → sources as TRIAL
+- **Karar:** Migration 004 copied the hand-picked pool (`https://www.youtube.com/@MrBeast`) into
+  `sources` with status TRIAL; it is evaluated by the normal 72 h trial like any discovered source.
+
+## D-019 SQLite in WAL mode
+- **Karar:** Five processes share `automation.db`; engine uses WAL + 30 s busy timeout.
+
 ## D-010 requirements
 - **Karar:** No `requirements.txt` existed; created a curated UTF-8 one (pinned to installed
   versions). The old UTF-16 freeze `requirements_working_20260522.txt` was converted to UTF-8.

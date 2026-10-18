@@ -81,12 +81,13 @@ def _slot_plan(messages):
         table = json.loads(data)
     except ValueError:
         table = {}
-    plans = []
+    actions = []
     for acc in table.get("accounts", []):
-        slots = [r["slot"] for r in acc.get("slots", []) if r.get("n", 0) >= 4]
-        plans.append({"account_id": acc["account_id"], "slots": slots[:3] or [18, 20],
-                      "reason": "mock: best relative performance"})
-    return {"plans": plans}
+        ranked = sorted((r for r in acc.get("slots", []) if r.get("n", 0) >= 4),
+                        key=lambda r: -(r.get("relative") or 0))
+        slots = [r["slot"] for r in ranked][:2] or [19, 21]
+        actions.append({"type": "slot_assign", "account_id": acc["account_id"], "slots": slots})
+    return {"actions": actions, "reason": "mock: highest relative performance slots"}
 
 
 def _source_queries(messages):
@@ -100,7 +101,7 @@ def _source_assessment(messages):
 
 
 def _account_review(messages):
-    return {"action": "continue", "reason": "mock: not enough evidence to pause"}
+    return {"actions": [{"type": "noop"}], "reason": "mock: not enough evidence to pause"}
 
 
 def _report_narrative(messages):

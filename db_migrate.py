@@ -72,7 +72,6 @@ def m002_instagram_schema(conn):
         ("posting_window", "VARCHAR"),           # "15:00-05:00" local, NULL = default
         ("activated_at", "DATETIME"),
         ("consecutive_failures", "INTEGER DEFAULT 0"),
-        ("niche", "VARCHAR"),
     ]
     for col, ddl in oc:
         add_column(conn, "owned_channels", col, ddl)
@@ -92,6 +91,8 @@ def m002_instagram_schema(conn):
         ("cycle_id", "INTEGER"),
         ("time_sensitive", "BOOLEAN DEFAULT 0"),
         ("clip_duration", "FLOAT"),
+        ("topic", "VARCHAR"),
+        ("files_deleted_at", "DATETIME"),
     ]
     for col, ddl in vid:
         add_column(conn, "videos", col, ddl)
@@ -128,9 +129,28 @@ def m003_sector_niche_slug(conn):
             conn.execute("UPDATE sectors SET music_slug=? WHERE id=?", (slug, sid))
 
 
+def m004_sources_from_legacy_channels(conn):
+    """Copy the old hand-picked pool (channels) into sources as TRIAL candidates."""
+    from credit import handle_from_url
+
+    if not (_table_exists(conn, "channels") and _table_exists(conn, "sources")):
+        return
+    now = datetime.datetime.utcnow().isoformat(sep=" ")
+    for cid, url, sector_id in conn.execute("SELECT id, url, sector_id FROM channels").fetchall():
+        if conn.execute("SELECT 1 FROM sources WHERE channel_url=?", (url,)).fetchone():
+            continue
+        conn.execute(
+            "INSERT INTO sources (channel_url, handle, sector_id, status, status_reason, status_changed_at,"
+            " discovered_at, legacy_channel_id, bandit_alpha, bandit_beta, clips_published)"
+            " VALUES (?, ?, ?, 'TRIAL', 'migrated from legacy pool', ?, ?, ?, 1.0, 1.0, 0)",
+            (url, handle_from_url(url), sector_id, now, now, cid))
+
+
 MIGRATIONS = [
     ("001_encrypt_owned_passwords", m001_encrypt_owned_passwords),
+    ("002_instagram_schema", m002_instagram_schema),
     ("003_sector_music_slug", m003_sector_niche_slug),
+    ("004_sources_from_legacy_channels", m004_sources_from_legacy_channels),
 ]
 
 

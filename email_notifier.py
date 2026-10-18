@@ -1,83 +1,98 @@
-import smtplib
+"""
+email_notifier.py — emergency e-mails only.
+
+* Settings from .env (SMTP_*, EMAIL_FROM, EMAIL_TO, EMAIL_ENABLED, EMAIL_TEST_MODE).
+* EMAIL_TEST_MODE=true (default) → messages are written to logs/outbox/*.eml
+  instead of being sent.
+* De-duplication: at most one e-mail per `kind` (+ optional key) every 6 hours.
+"""
+import datetime as _dt
 import json
 import os
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from datetime import datetime
+import smtplib
+import threading
+import uuid
+from email.message import EmailMessage
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'email_config.json')
+from config import settings
+from log_setup import get_logger
+
+log = get_logger("email")
+
+DEDUP_HOURS = 6
+_lock = threading.Lock()
+
+# The only kinds that may e-mail (task: "sadece acil durumlar").
+EMAIL_KINDS = {
+    "ACCOUNT_AUTO_PAUSED", "TOKEN_REFRESH_FAILED", "TOKEN_EXPIRING", "WATCHDOG",
+    "SERVICE_RESTART_FAILED", "DISK_LOW", "YOUTUBE_BLOCKED", "COOKIES_STALE",
+    "RISKY_COMMENT", "API_DEPRECATION", "BACKUP_FAILED",
+}
 
 
-def load_config():
-    if not os.path.exists(CONFIG_PATH):
-        print(f"[EMAIL] Konfigürasyon dosyası bulunamadı: {CONFIG_PATH}")
-        return None
+def _state_path() -> str:
+    os.makedirs(settings.LOG_DIR, exist_ok=True)
+    return os.path.join(settings.LOG_DIR, "email_dedup.json")
+
+
+def _load_state() -> dict:
     try:
-        with open(CONFIG_PATH, encoding='utf-8') as f:
+        with open(_state_path(), encoding="utf-8") as f:
             return json.load(f)
-    except Exception as e:
-        print(f"[EMAIL] Config okunamadı: {e}")
-        return None
+    except (OSError, ValueError):
+        return {}
 
 
-def send_alert(subject: str, body: str):
-    """
-    Konfigürasyona göre e-posta bildirimi gönderir.
-    email_config.json dosyasında 'enabled: true' olmalı.
-    """
-    config = load_config()
+def _save_state(state: dict):
+    with open(_state_path(), "w", encoding="utf-8") as f:
+        json.dump(state, f)
 
-    if not config:
-        print(f"[EMAIL] Config yok, bildirim atlandı: {subject}")
-        return
 
-    if not config.get('enabled', False):
-        print(f"[EMAIL] Bildirimler devre dışı. ({subject})")
-        return
+def should_send(dedup_key: str, now: _dt.datetime = None) -> bool:
+    now = now or _dt.datetime.utcnow()
+    with _lock:
+        state = _load_state()
+        last = state.get(dedup_key)
+        if last and now - _dt.datetime.fromisoformat(last) < _dt.timedelta(hours=DEDUP_HOURS):
+            return False
+        state[dedup_key] = now.isoformat()
+        _save_state(state)
+        return True
 
+
+def send_alert(kind: str, subject: str, body: str, key: str = "", now: _dt.datetime = None) -> str:
+    """Returns 'sent' | 'outbox' | 'deduped' | 'disabled' | 'not_emergency' | 'error'."""
+    if kind not in EMAIL_KINDS:
+        return "not_emergency"
+    if not settings.EMAIL_ENABLED:
+        log.info("email disabled: %s %s", kind, subject)
+        return "disabled"
+    if not should_send(f"{kind}:{key}", now):
+        log.info("email deduped (%sh): %s %s", DEDUP_HOURS, kind, key)
+        return "deduped"
+
+    msg = EmailMessage()
+    msg["From"] = settings.EMAIL_FROM or settings.SMTP_USER or "reels-bot@localhost"
+    msg["To"] = settings.EMAIL_TO or settings.EMAIL_FROM or "emre@localhost"
+    msg["Subject"] = f"[Reels Bot][{kind}] {subject}"
+    stamp = (now or _dt.datetime.utcnow()).strftime("%Y-%m-%d %H:%M UTC")
+    msg.set_content(f"{body}\n\n---\n{stamp}\nOtomatik bildirim — Reels otomasyonu")
+
+    if settings.EMAIL_TEST_MODE:
+        outbox = os.path.join(settings.LOG_DIR, "outbox")
+        os.makedirs(outbox, exist_ok=True)
+        path = os.path.join(outbox, f"{_dt.datetime.utcnow():%Y%m%dT%H%M%S}_{kind}_{uuid.uuid4().hex[:6]}.eml")
+        with open(path, "wb") as f:
+            f.write(bytes(msg))
+        log.info("email → outbox %s", path)
+        return "outbox"
     try:
-        msg = MIMEMultipart('alternative')
-        msg['From'] = config['from_email']
-        msg['To'] = config['to_email']
-        msg['Subject'] = f"[UTube Bot] {subject}"
-
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        plain_body = f"{body}\n\n---\nBildirim Zamanı: {timestamp}\nUTube Otomasyonu"
-        html_body = f"""
-        <html><body style="font-family: Arial, sans-serif; color: #333;">
-        <div style="background:#1a1a2e;color:#e0e0e0;padding:15px;border-radius:8px;margin-bottom:15px;">
-            <h2 style="margin:0;color:#00d4ff;">🤖 UTube Bot Bildirimi</h2>
-        </div>
-        <div style="background:#f8f9fa;padding:20px;border-radius:8px;border-left:4px solid #00d4ff;">
-            <h3 style="color:#1a1a2e;">{subject}</h3>
-            <pre style="white-space:pre-wrap;font-family:Consolas,monospace;font-size:13px;color:#333;">{body}</pre>
-        </div>
-        <p style="color:#999;font-size:12px;margin-top:15px;">
-            📅 {timestamp}<br>
-            <em>Bu mesaj UTube Otomasyon Sistemi tarafından gönderilmiştir.</em>
-        </p>
-        </body></html>
-        """
-
-        msg.attach(MIMEText(plain_body, 'plain', 'utf-8'))
-        msg.attach(MIMEText(html_body, 'html', 'utf-8'))
-
-        smtp_host = config.get('smtp_host', 'smtp.gmail.com')
-        smtp_port = config.get('smtp_port', 587)
-
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
-        server.ehlo()
-        server.starttls()
-        server.login(config['from_email'], config['smtp_password'])
-        server.send_message(msg)
-        server.quit()
-
-        print(f"[EMAIL] ✓ Bildirim gönderildi: {subject}")
-
-    except smtplib.SMTPAuthenticationError:
-        print("[EMAIL] ✗ Kimlik doğrulama hatası! Gmail kullanıyorsanız 'App Password' oluşturun.")
-    except smtplib.SMTPException as e:
-        print(f"[EMAIL] ✗ SMTP hatası: {e}")
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as s:
+            s.starttls()
+            s.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            s.send_message(msg)
+        log.info("email sent: %s", subject)
+        return "sent"
     except Exception as e:
-        print(f"[EMAIL] ✗ Bildirim gönderilemedi: {e}")
+        log.error("email failed: %s", e)
+        return "error"
