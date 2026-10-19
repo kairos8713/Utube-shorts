@@ -20,7 +20,8 @@ PAUSE_KINDS = {AUTH, PERMISSION, ACTION_BLOCKED}
 
 class IGError(RuntimeError):
     def __init__(self, kind: str, message: str, code=None, subcode=None, http_status=None):
-        super().__init__(f"{kind}: {message}")
+        from redact import redact
+        super().__init__(f"{kind}: {redact(message)}")   # never carry tokens/codes in error text
         self.kind = kind
         self.code = code
         self.subcode = subcode

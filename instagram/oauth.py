@@ -14,6 +14,7 @@ from config import settings
 from crypto_utils import encrypt
 from instagram.errors import IGError, classify
 from log_setup import get_logger
+from redact import redact, register_secret
 from timeutil import utcnow
 
 log = get_logger("ig_oauth")
@@ -39,7 +40,11 @@ def authorize_url(state: str) -> str:
 
 def _http(method, url, params=None, data=None):
     import requests
-    r = requests.request(method, url, params=params, data=data, timeout=60)
+    try:
+        r = requests.request(method, url, params=params, data=data, timeout=60)
+    except requests.exceptions.RequestException as e:
+        # the message contains the URL with code / client_secret / access_token
+        raise IGError("TRANSIENT", f"network: {redact(e)}") from None
     try:
         body = r.json()
     except ValueError:
@@ -73,6 +78,7 @@ def refresh_long_lived(token: str, http=_http) -> dict:
 
 def store_token(account, token: str, expires_in: int, now=None):
     now = now or utcnow()
+    register_secret(token)
     account.ig_access_token = encrypt(token)
     account.ig_token_expires_at = now + _dt.timedelta(seconds=expires_in)
     account.ig_token_refreshed_at = now

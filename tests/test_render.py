@@ -62,8 +62,12 @@ def rendered(tmp_path_factory):
     words = [{"start": 0.2 + i * 0.5, "end": 0.6 + i * 0.5, "text": w}
              for i, w in enumerate("this is a synthetic caption test".split())]
     out = str(d / "reel.mp4")
-    info = fr.render_reel(src, 2.0, 8.0, words, "TestSource", out, bgm_path=bgm, interpolate_fn=None,
-                          work_dir=str(d))
+    os.environ["BG_MUSIC_ENABLED"] = "true"          # exercise the music mix path here
+    try:
+        info = fr.render_reel(src, 2.0, 8.0, words, "TestSource", out, bgm_path=bgm, interpolate_fn=None,
+                              work_dir=str(d))
+    finally:
+        os.environ.pop("BG_MUSIC_ENABLED", None)
     return out, info
 
 

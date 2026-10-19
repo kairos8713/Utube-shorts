@@ -156,11 +156,11 @@ def test_double_publish_guard_finds_existing_media(db, queued):
     assert db.query(Post).one().ig_media_id == "M9"
 
 
-def test_double_publish_guard_retries_once_when_not_found(db, queued):
+def test_double_publish_guard_never_publishes_twice(db, queued):
     a, v, q = queued
     ig = FakeIG(publish_errors=[ig_error(E.TRANSIENT)], recent=[])
     res, _ = _pub(db, q, ig)
-    assert res == "PUBLISHED" and ig.calls.count("publish") == 2
+    assert res == "UNCERTAIN" and ig.calls.count("publish") == 1
 
 
 def test_auth_error_pauses_account_and_holds_queue(db, queued):

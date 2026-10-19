@@ -52,9 +52,9 @@ _SPEC = {
     "GPU_LOCK_PATH":         (str, os.path.join(os.path.expanduser("~"), "gpu_shared.lock")),
     "GPU_LOCK_TIMEOUT_S":    (int, "21600"),
     "OLLAMA_URL":            (str, "http://127.0.0.1:11434"),
-    "OLLAMA_MODEL":          (str, "qwen3-32b-local"),
+    "OLLAMA_MODEL":          (str, "qwen3:32b"),      # `ollama pull qwen3:32b`; alt: qwen3:30b-a3b
     "OLLAMA_TIMEOUT_S":      (int, "600"),
-    "OLLAMA_NUM_CTX":        (int, "16384"),
+    "OLLAMA_NUM_CTX":        (int, "8192"),           # fits 2x RTX 3060 (12 GB) with qwen3:32b
     "OLLAMA_KEEP_ALIVE":     (str, "15m"),           # within a batch; unload() → keep_alive 0
     "LLM_BACKEND":           (str, "ollama"),        # ollama | mock (tests / E2E without Ollama)
     "WHISPER_MODEL":         (str, "small"),
@@ -70,7 +70,9 @@ _SPEC = {
     "R2_ACCESS_KEY_ID":      (str, ""),
     "R2_SECRET_ACCESS_KEY":  (str, ""),
     "R2_BUCKET":             (str, ""),
-    "R2_PUBLIC_BASE_URL":    (str, ""),
+    "R2_PUBLIC_BASE_URL":    (str, ""),              # only needed when R2_URL_MODE=public
+    "R2_URL_MODE":           (str, "presigned"),     # presigned (1 h signed GET URL) | public
+    "R2_PRESIGN_EXPIRES_S":  (int, "3600"),
     # ── e-mail ──────────────────────────────────────────────────────────────
     "EMAIL_ENABLED":         (_bool, "false"),
     "EMAIL_TEST_MODE":       (_bool, "true"),         # true → write to logs/outbox/
@@ -80,6 +82,11 @@ _SPEC = {
     "SMTP_PASSWORD":         (str, ""),
     "EMAIL_FROM":            (str, ""),
     "EMAIL_TO":              (str, ""),
+    # ── render ──────────────────────────────────────────────────────────────
+    "BG_MUSIC_ENABLED":      (_bool, "false"),        # bg_music tracks may not be licensed for Instagram
+    # ── YouTube / yt-dlp ────────────────────────────────────────────────────
+    "YTDLP_PLAYER_CLIENTS":  (str, "mweb,tv,web_safari"),   # PO-Token-Guide: provider + mweb
+    "POT_PROVIDER_URL":      (str, ""),               # bgutil HTTP server; empty = default 127.0.0.1:4416
     # ── scheduling ──────────────────────────────────────────────────────────
     "POSTING_WINDOW_START":  (str, "15:00"),          # Europe/Warsaw local time
     "POSTING_WINDOW_END":    (str, "05:00"),

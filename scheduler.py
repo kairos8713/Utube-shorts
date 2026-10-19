@@ -37,7 +37,7 @@ HORIZON_DAYS = 6                # 2 cycles
 LEAD = _dt.timedelta(minutes=10)
 MISSED_GRACE = _dt.timedelta(minutes=15)
 PLAN_MAX_AGE = _dt.timedelta(days=7)
-QUEUED_STATES = ("PENDING", "HELD", "UPLOADED")
+QUEUED_STATES = ("PENDING", "PUBLISHING", "HELD", "UPLOADED")
 
 
 # ── slot table + Qwen plan ───────────────────────────────────────────────────
@@ -112,7 +112,8 @@ def qwen_slots(session, account_id: int, now=None):
 # ── placement helpers ────────────────────────────────────────────────────────
 
 def taken_times(session) -> list:
-    rows = session.query(UploadQueue.scheduled_for).filter(UploadQueue.status.in_(("PENDING", "UPLOADED"))).all()
+    rows = (session.query(UploadQueue.scheduled_for)
+            .filter(UploadQueue.status.in_(("PENDING", "PUBLISHING", "UPLOADED"))).all())
     return sorted(r[0] for r in rows if r[0])
 
 
@@ -177,7 +178,7 @@ def schedule_account(session, acc, now=None, rng=None, horizon_days: int = HORIZ
         if w_end <= max(now + LEAD, ready):
             continue
         used = (session.query(UploadQueue).filter(UploadQueue.owned_channel_id == acc.id,
-                                                  UploadQueue.status.in_(("PENDING", "UPLOADED")),
+                                                  UploadQueue.status.in_(("PENDING", "PUBLISHING", "UPLOADED")),
                                                   UploadQueue.scheduled_for >= w_start,
                                                   UploadQueue.scheduled_for < w_end).count())
         avail = [(k, max(s, now + LEAD, ready), e) for k, s, e in slots_for(day, acc.posting_window)

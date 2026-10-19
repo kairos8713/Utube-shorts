@@ -1,6 +1,7 @@
 # Instagram Reels pipeline — direct dependencies (pinned to the versions on the
 # production PC, 2026-10-19). Full historical freeze: requirements_working_20260522.txt
-# torch is the CUDA 11.8 build: pip install torch==2.3.1 --index-url https://download.pytorch.org/whl/cu118
+# torch/torchvision are the CUDA 11.8 builds (scripts/setup_venv.ps1 installs them first):
+#   pip install torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cu118
 
 # web panel
 Flask==3.1.2
@@ -19,10 +20,12 @@ requests==2.32.5
 boto3==1.43.114
 
 # media / AI
-yt-dlp==2026.8.19
-yt-dlp-ejs==0.8.0
+yt-dlp>=2026.8.19       # setup_venv.ps1 always installs the newest
+yt-dlp-ejs>=0.8.0
+bgutil-ytdlp-pot-provider   # PO-token provider plugin (needs the bgutil server, see setup_venv.ps1)
 openai-whisper==20250625
 torch==2.3.1
+torchvision==0.18.1     # Practical-RIFE model/loss.py
 numpy==1.26.4
 scipy==1.16.3
 opencv-python==4.9.0.80

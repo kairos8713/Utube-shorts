@@ -26,7 +26,7 @@ _lock = threading.Lock()
 EMAIL_KINDS = {
     "ACCOUNT_AUTO_PAUSED", "TOKEN_REFRESH_FAILED", "TOKEN_EXPIRING", "WATCHDOG",
     "SERVICE_RESTART_FAILED", "DISK_LOW", "YOUTUBE_BLOCKED", "COOKIES_STALE",
-    "RISKY_COMMENT", "API_DEPRECATION", "BACKUP_FAILED",
+    "RISKY_COMMENT", "API_DEPRECATION", "BACKUP_FAILED", "PUBLISH_UNCERTAIN", "FFMPEG_TOO_OLD",
 }
 
 
@@ -71,6 +71,8 @@ def send_alert(kind: str, subject: str, body: str, key: str = "", now: _dt.datet
         log.info("email deduped (%sh): %s %s", DEDUP_HOURS, kind, key)
         return "deduped"
 
+    from redact import redact
+    subject, body = redact(subject), redact(body)
     msg = EmailMessage()
     msg["From"] = settings.EMAIL_FROM or settings.SMTP_USER or "reels-bot@localhost"
     msg["To"] = settings.EMAIL_TO or settings.EMAIL_FROM or "emre@localhost"

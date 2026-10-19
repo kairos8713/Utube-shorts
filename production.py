@@ -231,7 +231,9 @@ class Pipeline:
                 with gpu_job("render"):
                     cand.render_info = self.render_fn(
                         cand.segment["path"], cand.start, cand.end, cand.words, cand.source.source_handle,
-                        cand.out_path, bgm_path=pick_bg_music(cand.source.niche, cand.source.music_slug),
+                        cand.out_path,
+                        bgm_path=(pick_bg_music(cand.source.niche, cand.source.music_slug)
+                                  if settings.BG_MUSIC_ENABLED else None),
                         interpolate_fn=self.interpolate_fn, work_dir=settings.WORK_DIR)
                 cand.qc = self.qc_fn(cand.out_path, cand.render_info.get("duration"))
             except Exception as e:

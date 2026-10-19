@@ -11,7 +11,7 @@ What is on screen (nothing else):
     3. kinetic word-by-word ASS captions (safe area ≈ y 1290–1420)
     4. small source credit "@handle" just above the video (x=60, y=590)
 
-Audio: original audio + background music → loudnorm -14 LUFS → 48 kHz.
+Audio: original audio (+ background music only if BG_MUSIC_ENABLED) → loudnorm -14 LUFS → 48 kHz.
 
 Stages
     render_base()   → 30 fps intermediate with mixed/normalised audio
@@ -284,6 +284,9 @@ def render_base(video_path: str, start: float, end: float, out_path: str,
     clip_dur = round(safe_end - start, 3)
     if clip_dur <= 1:
         raise RuntimeError(f"Clip too short ({clip_dur:.2f}s) for {video_path}")
+    from config import settings
+    if not settings.BG_MUSIC_ENABLED:
+        bgm_path = None                 # music off: no second ffmpeg input at all
     has_bgm = bool(bgm_path and os.path.exists(bgm_path))
 
     tmp_dir = tempfile.mkdtemp(prefix="ffr_")

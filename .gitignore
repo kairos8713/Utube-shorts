@@ -44,6 +44,10 @@ bg_music/**/*.mp3
 bg_music/**/*.wav
 bg_music/**/*.ogg
 
+# ── Local tooling ───
+.venv/
+tools/
+
 # ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc

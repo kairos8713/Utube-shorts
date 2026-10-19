@@ -45,7 +45,7 @@ def publish_due(session, now=None, rng=None, **kw) -> list:
                 _dt.timedelta(seconds=rng.randint(60, 180))
             session.commit()
             continue
-        if outcome in ("PUBLISHED", "RETRY", "PAUSED", "COPYRIGHT"):
+        if outcome in ("PUBLISHED", "RETRY", "RETRY_SLOW", "UNCERTAIN", "PAUSED", "COPYRIGHT"):
             break           # the gap now applies to everyone
     return outcomes
 
@@ -53,6 +53,8 @@ def publish_due(session, now=None, rng=None, **kw) -> list:
 def tick(session, now=None):
     now = now or utcnow()
     system_state.heartbeat("publisher", session)
+    jobs.run_if_due("reconcile_uncertain", _dt.timedelta(minutes=10),
+                    lambda: publisher.reconcile_uncertain(session, now), now, session)
     jobs.run_if_due("reschedule_missed", _dt.timedelta(minutes=10),
                     lambda: scheduler.reschedule_missed(session, now), now, session)
     publish_due(session, now)
@@ -71,6 +73,14 @@ def tick(session, now=None):
         pass
 
 
+def startup_reconcile(session, now=None, **kw) -> dict:
+    """Settle posts left CONTAINER / UNKNOWN (e.g. by a crash) before publishing anything again."""
+    out = publisher.reconcile_uncertain(session, now, **kw)
+    jobs.mark("reconcile_uncertain", now, session)
+    log.info("start-up reconcile: %s", out)
+    return out
+
+
 def main():
     import db_migrate
     import power
@@ -78,6 +88,13 @@ def main():
     power.prevent_sleep()
     system_state.register_service("publisher")
     log.info("publisher service started (DRY_RUN=%s)", __import__("config").settings.DRY_RUN)
+    s = Session()
+    try:
+        startup_reconcile(s)
+    except Exception as e:
+        log.error("start-up reconcile failed: %s", e)
+    finally:
+        s.close()
     while True:
         session = Session()
         try:

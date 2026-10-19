@@ -35,7 +35,7 @@ def test_json_call_payload_has_think_false_and_format():
     assert out == {"ok": 1}
     payload = t.calls[0][2]
     assert payload["think"] is False and payload["format"] == "json"
-    assert payload["options"]["num_ctx"] == 16384
+    assert payload["options"]["num_ctx"] == 8192
     assert payload["messages"][-1]["content"].endswith("/no_think")
 
 
@@ -78,9 +78,12 @@ def test_extract_json_strips_think_and_fences():
     assert extract_json("<think>blah {no}</think>\n```json\n{\"k\": 3}\n```") == {"k": 3}
 
 
-def test_health_checks_model_name():
+def test_health_checks_exact_model_tag():
     c, _ = make([(200, {"models": [{"name": "qwen3-32b-local:latest"}]})])
     assert c.health()
+    c, _ = make([(200, {"models": [{"name": "qwen3:8b"}]})])
+    c.model = "qwen3:32b"
+    assert not c.health()                 # another qwen3 tag is not our model
 
 
 def test_data_block_cannot_be_closed_from_inside():

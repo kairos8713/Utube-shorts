@@ -15,6 +15,8 @@ log = get_logger("alerts")
 
 def raise_alert(kind: str, message: str, severity: str = "WARNING", account_id: int = None,
                 email: bool = True, session=None) -> Alert:
+    from redact import redact
+    message = redact(message)
     own = session is None
     s = session or Session()
     try:

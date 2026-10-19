@@ -1,12 +1,15 @@
-# Ollama Modelfile — local Qwen3-32B (Q4_K_M GGUF)
+# Ollama Modelfile — OPTIONAL (only for a local GGUF file).
 #
-#   ollama create qwen3-32b-local -f ollama/Modelfile
+# Default setup needs no Modelfile:   ollama pull qwen3:32b      (.env OLLAMA_MODEL=qwen3:32b)
+# Alternative (MoE, faster):          ollama pull qwen3:30b-a3b  (.env OLLAMA_MODEL=qwen3:30b-a3b)
 #
-# Expected weights: C:\models\Qwen3-32B-Q4_K_M.gguf (~19.8 GB). On 2× RTX 3060 (24 GB total)
-# Ollama splits layers across both cards. 16k context + fp16 KV cache is ~4 GB extra and
-# may spill a few layers to CPU; set these system env vars before starting Ollama:
-#   OLLAMA_FLASH_ATTENTION=1
-#   OLLAMA_KV_CACHE_TYPE=q8_0
+# Only if you want to serve your own GGUF instead:
+#   ollama create qwen3-32b-local -f ollama/Modelfile   and set OLLAMA_MODEL=qwen3-32b-local
+#
+# 2x RTX 3060 (24 GB total): ~20 GB weights + KV cache. Context 8192 keeps it on the GPUs; also set
+#   OLLAMA_FLASH_ATTENTION=1 and OLLAMA_KV_CACHE_TYPE=q8_0 (system env vars) before starting Ollama.
+# The cycle runner checks at start-up (GET /api/ps, same data as `ollama ps`) that the model is fully
+# on the GPU and raises a warning alarm if part of it spilled to the CPU.
 #
 # The TEMPLATE mirrors Qwen3's ChatML format and honours Ollama's `think` request flag
 # (think=false → empty <think></think> block). llm_client.py additionally appends /no_think
@@ -14,7 +17,7 @@
 
 FROM C:\models\Qwen3-32B-Q4_K_M.gguf
 
-PARAMETER num_ctx 16384
+PARAMETER num_ctx 8192
 PARAMETER temperature 0.6
 PARAMETER top_p 0.95
 PARAMETER top_k 20

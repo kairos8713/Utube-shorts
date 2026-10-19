@@ -12,6 +12,15 @@ from logging.handlers import RotatingFileHandler
 from config import settings
 
 _FMT = "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
+
+
+class RedactingFormatter(logging.Formatter):
+    """Every formatted line (message + traceback) passes through redact()."""
+
+    def format(self, record):
+        from redact import redact
+        return redact(super().format(record))
+
 _configured = set()
 
 
@@ -26,12 +35,12 @@ def get_logger(name: str, filename: str = None) -> logging.Logger:
         os.path.join(log_dir, filename or f"{name.split('.')[0]}.log"),
         maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8",
     )
-    fh.setFormatter(logging.Formatter(_FMT))
+    fh.setFormatter(RedactingFormatter(_FMT))
     logger.addHandler(fh)
     if not any(isinstance(h, logging.StreamHandler) and not isinstance(h, RotatingFileHandler)
                for h in logger.handlers):
         sh = logging.StreamHandler(sys.stdout)
-        sh.setFormatter(logging.Formatter(_FMT))
+        sh.setFormatter(RedactingFormatter(_FMT))
         logger.addHandler(sh)
     logger.propagate = False
     _configured.add(name)

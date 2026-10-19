@@ -19,6 +19,7 @@ from typing import Callable, Optional
 from config import settings
 from instagram.errors import IGError, TRANSIENT, classify
 from log_setup import get_logger
+from redact import redact, register_secret
 
 log = get_logger("ig_client")
 
@@ -35,7 +36,8 @@ def _requests_transport(method, url, params=None, data=None, headers=None, body=
         r = requests.request(method, url, params=params, data=body if body is not None else data,
                              headers=headers, timeout=timeout)
     except requests.exceptions.RequestException as e:
-        raise IGError(TRANSIENT, f"network: {e}")
+        # requests puts the full URL (incl. ?access_token=...) into the message
+        raise IGError(TRANSIENT, f"network: {redact(e)}") from None
     try:
         payload = r.json()
     except ValueError:
@@ -198,5 +200,6 @@ class IGClient:
 
 def client_for(account, **kw) -> IGClient:
     from crypto_utils import decrypt
-    return IGClient(decrypt(account.ig_access_token) if account.ig_access_token else "", account.ig_user_id or "",
-                    **kw)
+    token = decrypt(account.ig_access_token) if account.ig_access_token else ""
+    register_secret(token)              # mask this exact token in every log / message from now on
+    return IGClient(token, account.ig_user_id or "", **kw)

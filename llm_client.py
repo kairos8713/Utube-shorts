@@ -105,12 +105,38 @@ class OllamaClient:
         raise LLMError(str(last))
 
     def health(self) -> bool:
+        """Ollama answers AND the exact model (tag included, e.g. qwen3:32b) is installed."""
         try:
             body = self._call("/api/tags", None, method="GET", attempts=1, timeout=5)
         except LLMError:
             return False
-        names = {m.get("name", "").split(":")[0] for m in body.get("models", [])}
-        return self.model.split(":")[0] in names
+        names = {_full_name(m.get("name") or m.get("model") or "") for m in body.get("models", [])}
+        return _full_name(self.model) in names
+
+    def load(self, keep_alive: str = "5m"):
+        """Load the model into memory without generating (Ollama: /api/generate with no prompt)."""
+        self._call("/api/generate", {"model": self.model, "keep_alive": keep_alive}, attempts=1)
+
+    def gpu_residency(self) -> Optional[float]:
+        """Share of the loaded model that sits in VRAM (1.0 = fully on GPU), None if not loaded.
+        Same data as the PROCESSOR column of `ollama ps` (GET /api/ps: size vs size_vram);
+        falls back to parsing the `ollama ps` CLI output."""
+        try:
+            body = self._call("/api/ps", None, method="GET", attempts=1, timeout=10)
+            for m in body.get("models", []):
+                if _full_name(m.get("name") or m.get("model") or "") == _full_name(self.model):
+                    size, vram = m.get("size") or 0, m.get("size_vram")
+                    if size and vram is not None:
+                        return max(0.0, min(1.0, vram / size))
+            return None
+        except LLMError:
+            pass
+        try:
+            import subprocess
+            out = subprocess.run(["ollama", "ps"], capture_output=True, text=True, timeout=20).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return parse_ollama_ps(out, self.model)
 
     def unload(self):
         """Free VRAM now (keep_alive 0)."""
@@ -168,6 +194,27 @@ class OllamaClient:
                  + ". Reply again with ONE corrected JSON object only."},
             ]
         raise LLMBadOutput(f"{task}: no valid JSON after {retries + 1} attempts: {errors}")
+
+
+def _full_name(name: str) -> str:
+    name = (name or "").strip()
+    return name if ":" in name else f"{name}:latest"
+
+
+def parse_ollama_ps(text: str, model: str) -> Optional[float]:
+    """PROCESSOR column of `ollama ps`: '100% GPU', '100% CPU', '48%/52% CPU/GPU' → GPU share."""
+    for line in (text or "").splitlines()[1:]:
+        cols = line.split()
+        if not cols or _full_name(cols[0]) != _full_name(model):
+            continue
+        m = re.search(r"(\d+)%/(\d+)%\s+CPU/GPU", line)
+        if m:
+            return int(m.group(2)) / 100.0
+        m = re.search(r"(\d+)%\s+(GPU|CPU)\b", line)
+        if m:
+            pct = int(m.group(1)) / 100.0
+            return pct if m.group(2) == "GPU" else 1.0 - pct
+    return None
 
 
 def _log_call(task, seconds, prompt_tokens, completion_tokens, backend):

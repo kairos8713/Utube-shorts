@@ -58,11 +58,21 @@ Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_mi
 
 ## 3. Emre'nin yapması gerekenler (sırayla)
 
-1. **YouTube indirmesi bozuk (acil):** yt-dlp 2026.08.19 ile her indirme
-   `HTTP Error 403` veriyor (android_vr istemcisi "GVS PO Token" istiyor). Çözüm sırası:
-   `python -m pip install -U yt-dlp yt-dlp-ejs` → yine olmazsa PO Token eklentisi
-   (yt-dlp wiki "PO-Token-Guide", ör. `bgutil-ytdlp-pot-provider`) ve taze `cookies.txt`.
-   Sistem bu hatayı artık "YouTube engeli" sayıp indirmeleri durdurur ve alarm verir.
+1. **YouTube indirmesi bozuk (acil) → ayrı Python ortamı + PO token sağlayıcı:** yt-dlp 2026.08.19 ile
+   her indirme `HTTP Error 403` veriyor (YouTube "GVS PO Token" istiyor). yt-dlp wiki PO-Token-Guide'ın
+   önerisi: PO token sağlayıcı eklentisi + `mweb` istemcisi (kod artık `YTDLP_PLAYER_CLIENTS=mweb,tv,web_safari`
+   kullanıyor). Adımlar (script'ler yazıldı, **çalıştırılmadı**):
+   1. `powershell -ExecutionPolicy Bypass -File scripts\setup_venv.ps1` → proje kökünde `.venv`
+      (torch/torchvision cu118, `requirements.txt`, en güncel `yt-dlp[default]` + `yt-dlp-ejs` +
+      `bgutil-ytdlp-pot-provider`), ayrıca `toolsgutil-ytdlp-pot-provider\server` altında sağlayıcı
+      sunucusu (Node ≥ 22 gerekli — bu PC'de v24 var; `git clone --branch 2.0.2` → `npm ci` → `npx tsc`).
+      Önce https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases'ten son sürümü kontrol et,
+      gerekirse `-PotProviderVersion` ver.
+   2. Sunucuyu bir kez elle başlat: `node toolsgutil-ytdlp-pot-provider\serveruild\main.js`
+      (127.0.0.1:4416). Doğrula: `.venv\Scripts\python.exe -m yt_dlp -v --skip-download <youtube-url>` →
+      çıktıda `[pot] PO Token Providers: bgutil:http-…` ve `Generating a gvs PO Token` görünmeli.
+   3. Taze `cookies.txt`. Hâlâ 403 ise alternatif eklenti: `yt-dlp-getpot-wpc` (wiki'de yedek olarak geçiyor).
+   Sistem bu hatayı "YouTube engeli" sayıp indirmeleri durdurur ve alarm verir.
 2. **Sızmış anahtarlar:** Bu kopyada `youtube_analytics.py` yoktu, ama orijinal public repoda
    hardcoded YouTube API anahtarı varsa **Google Cloud Console → Credentials'tan iptal et**
    (git geçmişi yeniden yazılmadı). `client_secret.json` (Google OAuth) da public repoda olduysa
@@ -71,8 +81,8 @@ Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_mi
    - Panel şifresi: `python scripts/init_secrets.py --set-panel-password` (şu an giriş kapalı).
    - `FERNET_KEY`'i bir şifre yöneticisine kopyala. Kaybolursa tüm token'lar okunamaz.
    - `IG_APP_ID`, `IG_APP_SECRET`, `IG_REDIRECT_URI`.
-   - `R2_ENDPOINT_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`
-     (zorunlu, aşağıdaki not).
+   - `R2_ENDPOINT_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` (zorunlu, aşağıdaki not);
+     `R2_PUBLIC_BASE_URL` sadece `R2_URL_MODE=public` ise gerekli.
    - E-posta: SMTP değerleri taşındı; gerçek gönderim için `EMAIL_ENABLED=true` ve
      `EMAIL_TEST_MODE=false` yap. Sonra `email_config.json`'ı sil.
    - Hazır olunca `DRY_RUN=false`.
@@ -85,20 +95,28 @@ Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_mi
    paneldeki "OAuth geri dönüşü panele ulaşmadıysa" kutusuna yapıştır).
 5. **Video barındırma (R2) zorunlu:** Meta dokümantasyonuna göre resumable upload yalnızca
    *Facebook Login for Business* uygulamalarında var. Instagram Login ile video bir **public URL**
-   (`video_url`) üzerinden alınmalı → `IG_UPLOAD_METHOD=r2_url` (varsayılan). Cloudflare R2
-   bucket'ı + public erişim (r2.dev veya kendi alan adın) aç; dosyalar yayından hemen sonra silinir.
+   (`video_url`) üzerinden alınmalı → `IG_UPLOAD_METHOD=r2_url` (varsayılan). Varsayılan
+   `R2_URL_MODE=presigned`: bucket **private** kalır, Instagram'a 1 saat geçerli imzalı GET URL'si verilir
+   (`R2_PUBLIC_BASE_URL` gerekmez). ⚠️ Instagram'ın imzalı URL'yi kabul ettiği **doğrulanmadı** — ilk gerçek
+   yayında kontrol et; container ERROR verirse `R2_URL_MODE=public` + bucket'a public erişim (r2.dev veya
+   kendi alan adın) + `R2_PUBLIC_BASE_URL`. Dosyalar yayından hemen sonra silinir.
 6. **Hesaplar:** Her hesabı Professional (Creator/Business) yap → panelde *Hesaplar → Yeni hesap*
    → *Hesap Bağla* → hesabın kurulum/ısınma tamamlanma tarihini gir. İlk paylaşım bu tarihten
    **2 gün sonra**. Tarih girilmeyen hesaba hiç yükleme yapılmaz.
 7. **Ollama + model:**
    - Ollama'yı kur (ollama.com), sistem değişkenleri: `OLLAMA_FLASH_ATTENTION=1`,
      `OLLAMA_KV_CACHE_TYPE=q8_0`.
-   - GGUF'u `C:\models\Qwen3-32B-Q4_K_M.gguf` yoluna koy (gece **bulunamadı**).
-   - `ollama create qwen3-32b-local -f ollama/Modelfile`
-   - Test: `ollama run qwen3-32b-local "merhaba"`. 2×12 GB'a tam sığmazsa `.env`'de
-     `OLLAMA_NUM_CTX=8192`.
-8. **Otomatik başlatma:** `powershell -ExecutionPolicy Bypass -File scripts\install_autostart.ps1`
-   (5 görev: panel, watchdog, publisher, comments, cycle runner). Windows Update → Gelişmiş →
+   - Model: `ollama pull qwen3:32b` (~20 GB). `.env`: `OLLAMA_MODEL=qwen3:32b`, `OLLAMA_NUM_CTX=8192`
+     (varsayılanlar bunlar). GGUF dosyası / Modelfile **gerekmiyor** (`ollama/Modelfile` sadece kendi
+     GGUF'unu kullanmak istersen).
+   - Alternatif: `ollama pull qwen3:30b-a3b` (~19 GB, MoE, çok daha hızlı) — sadece
+     `OLLAMA_MODEL=qwen3:30b-a3b` değiştirmek yeterli, başka kod değişikliği yok.
+   - Test: `ollama run qwen3:32b "merhaba"` ve `ollama ps` → PROCESSOR sütunu `100% GPU` olmalı.
+     cycle_runner açılışta bunu kendisi kontrol eder; CPU'ya taşma varsa `LLM_CPU_OFFLOAD` uyarı alarmı verir.
+8. **Otomatik başlatma:** (önce 1. maddedeki `setup_venv.ps1`) →
+   `powershell -ExecutionPolicy Bypass -File scripts\install_autostart.ps1`. Tüm Python servisleri
+   `.venv\Scripts\pythonw.exe` ile çalışır; 6 görev: PO token sunucusu (node, varsa), panel, watchdog,
+   publisher, comments, cycle runner. Windows Update → Gelişmiş →
    **Etkin saatler**'i yayın penceresini (15:00–05:00 Warsaw) kapsayacak şekilde ayarla; prizdeki
    güç planında uykuyu kapat.
 9. **Long-form pipeline (utube-lfv / llama-server):** aynı GPU kilidini kullanmalı:
@@ -106,7 +124,8 @@ Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_mi
    önce al, bitince bırak. Aksi halde iki pipeline aynı anda VRAM'e girer.
 10. **Arka plan müziği lisansı:** `bg_music/*_riskli` parçaları YouTube Audio Library'den görünüyor
     (The Grey Room, Patrick Patrikios…). Bu lisans YouTube içindir; Instagram sesi susturabilir veya
-    engelleyebilir. Instagram'da kullanım hakkı olan müzikle değiştir ya da klasörleri boşalt.
+    engelleyebilir. Bu yüzden müzik artık **varsayılan olarak kapalı** (`BG_MUSIC_ENABLED=false`, render'a
+    müzik girdisi hiç eklenmez). Instagram'da kullanım hakkı olan müzik koyarsan `true` yap.
 11. **Kaynak:** Eski havuzdaki tek kaynak `@MrBeast` TRIAL olarak taşındı. Çok kesilen, telif
     koruması güçlü bir kanal; sistem test sonucuna göre karar verecek ama baştan çıkarmak isteyebilirsin
     (panel → Kaynaklar → Kara liste).
@@ -126,6 +145,8 @@ Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_mi
 - Polling: dokümanlar "dakikada bir, en fazla 5 dk" diyor; Reels işlenmesi uzun sürebildiği için
   zaman aşımı 10 dk.
 - Copyright: container'daki `copyright_check_status.matches_found=true` olursa yayın iptal + kaynak kara liste.
+- R2 imzalı (presigned) URL'nin Instagram'ın `video_url` alıcısı tarafından kabul edilmesi (ilk gerçek yayın).
+- bgutil PO token sunucusunun bu PC'de derlenip çalışması (script yazıldı, çalıştırılmadı).
 
 ## 5. Önemli kararlar (ayrıntı: `docs/DECISIONS.md`)
 
@@ -207,3 +228,52 @@ python -m pytest -q tests
 `cycle_runner.py` / `publish_runner.py` / `comment_responder.py` / `watchdog.py` sürekli çalışan
 servislerdir. Ollama/model hazır değilse cycle_runner üretimi o döngü atlar ve panelde
 `LLM_UNAVAILABLE` alarmı çıkar (mock'a asla düşmez; mock sadece testler ve E2E içindir).
+
+## Düzeltmeler
+
+İnceleme sonrası düzeltmeler (tek commit, `instagram-migration`; `DRY_RUN=true`, push yok).
+Testler: **240 geçti** (yeni `tests/test_fixes.py`: 37 test).
+
+1. **Çift yayın (kritik):** `media_publish` artık her container için **en fazla bir kez** çağrılıyor.
+   Sonuç belirsizse (ağ/5xx/sınıflanmamış hata, ya da "container PUBLISHED ama medya yok") post `UNKNOWN`
+   kalıyor, kuyruk öğesi `HELD`, hata sayacı artmıyor, otomatik yeniden deneme yok. Yayın sırasında öğe
+   `PUBLISHING` durumunda; servis çökerse yeniden açılışta tekrar yayınlanmaz. Yeni
+   `reconcile_uncertain()` (publish_runner açılışında + 10 dk'da bir): 10 dk'dan eski `CONTAINER/UNKNOWN`
+   postlar için container durumu + son 25 medyada caption eşleşmesi → bulunduysa `PUBLISHED`; 2 saat
+   sonra container yayınlanmamışsa post `FAILED`, öğe `PENDING` (normal yeniden deneme); 2 saat sonra
+   hâlâ belirsizse `PUBLISH_UNCERTAIN` CRITICAL alarm + e-posta, öğe `HELD`.
+2. **Token sızıntısı:** `redact.py` — `access_token`, `client_secret`, uzun `code=` değerleri,
+   `Authorization` başlıkları, `IGAA…` token'ları, çözülmüş token'lar ve `.env` sırları, R2 imza
+   parametreleri maskeleniyor. IGError metinleri, HTTP transport istisnaları, OAuth akışı, token
+   yenileme, **tüm log satırları (traceback dahil)**, alarm ve e-posta metinleri buradan geçiyor.
+3. **Yorumla kara liste:** Tek yorum artık kaynağı kara listeye almıyor (sadece alarm + "Dikkat
+   gerektirenler"). Otomatik kara liste yalnızca: son 7 günde aynı kaynağın kliplerinde **3 farklı
+   kullanıcıdan** açık hak iddiası (copyright, dmca, takedown, without permission, reupload, telif) veya
+   yorumu yazanın kullanıcı adı kaynağın handle'ıyla eşleşiyorsa. "stole", "my video" gibi ifadeler RISKY
+   kalır ama sayıma girmez.
+4. **Yavaş işleme:** `NOT_READY` (poll zaman aşımı) hata sayacını artırmıyor, otomatik duraklatmaya
+   sayılmıyor; sadece `retry_count` artıyor ve 30 dk sonra tekrar deneniyor. (Ek olarak bulunan hata:
+   `poll_timeout=0` sessizce 600 sn'ye dönüşüyordu — düzeltildi.)
+5. **R2 imzalı URL:** `R2_URL_MODE=presigned` (varsayılan, 1 saatlik imzalı GET, bucket private,
+   `R2_PUBLIC_BASE_URL` gerekmez) veya `public`. Instagram'ın imzalı URL'yi kabul ettiği ilk gerçek
+   yayında doğrulanmalı (§3 madde 5).
+6. **Müzik:** `BG_MUSIC_ENABLED=false` varsayılan; kapalıyken render'a müzik girdisi hiç eklenmiyor.
+7. **FFmpeg sürümü:** cycle_runner açılışta FFmpeg ≥ 7 kontrol ediyor (sürüm numarası olmayan git
+   build'lerde libavfilter ≥ 10). Düşükse `FFMPEG_TOO_OLD` CRITICAL alarm + e-posta ve servis başlamıyor.
+   Bu PC: libavfilter 12.3 → geçti.
+8. **Ayrı Python ortamı:** `scripts/setup_venv.ps1` (yeni) + `install_autostart.ps1` artık
+   `.venv\Scripts\pythonw.exe` kullanıyor ve PO token sunucusunu (`Reels-PotProvider`) da kaydediyor.
+   İkisi de **çalıştırılmadı** (sadece PowerShell parser ile sözdizimi kontrol edildi). `requirements.txt`'e
+   eksik olan `torchvision` (RIFE `model/loss.py` istiyor) ve `bgutil-ytdlp-pot-provider` eklendi;
+   yt-dlp sabit sürümden `>=`'e çevrildi. İndirici `YTDLP_PLAYER_CLIENTS` (varsayılan `mweb,tv,web_safari`)
+   ve isteğe bağlı `POT_PROVIDER_URL` kullanıyor.
+9. **Ollama modeli:** `OLLAMA_MODEL` varsayılan `qwen3:32b`, `OLLAMA_NUM_CTX` varsayılan 8192, GGUF/Modelfile
+   opsiyonel. Model sağlık kontrolü artık tam etiketle eşleşiyor (önceden herhangi bir `qwen3:*` yeterliydi).
+   Açılışta model yüklenip `GET /api/ps` (`ollama ps` ile aynı veri; API yoksa `ollama ps` çıktısı
+   ayrıştırılıyor) ile GPU payı kontrol ediliyor; %99'un altındaysa `LLM_CPU_OFFLOAD` uyarı alarmı.
+
+**Yerel `.env` güncellendi** (commit'e girmez): dün geceki `.env` eski varsayılanlardan üretildiği için
+`IG_API_VERSION=v24.0`, `IG_UPLOAD_METHOD=resumable`, `OLLAMA_MODEL=qwen3-32b-local` değerlerini sabitliyordu ve
+yeni varsayılanları geçersiz kılıyordu. Bunlar `v25.0`, `r2_url`, `qwen3:32b` yapıldı; `OLLAMA_NUM_CTX=8192`,
+`R2_URL_MODE=presigned`, `BG_MUSIC_ENABLED=false`, `YTDLP_PLAYER_CLIENTS` eklendi. Gizli değerlere dokunulmadı;
+`DRY_RUN=true` kaldı. `.env.example` yeniden üretildi.

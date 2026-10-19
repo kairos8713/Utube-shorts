@@ -43,9 +43,13 @@ REPLY_SIMILARITY_MAX = 0.7
 MAX_REPLY_CHARS = 150
 
 RISKY_RE = re.compile(r"(copyright|copy right|dmca|take ?down|remove (this|it)|my (video|content|clip|channel)|"
-                      r"stole|stolen|steal|lawyer|sue\b|report(ed|ing)? you|without permission|credit me|"
+                      r"stole|stolen|steal|lawyer|sue\b|report(ed|ing)? you|without (my )?permission|credit me|"
                       r"reupload|re-upload|telif)", re.I)
-COPYRIGHT_RE = re.compile(r"(copyright|dmca|take ?down|my (video|content|clip)|stole|stolen|without permission)", re.I)
+# Only EXPLICIT rights claims count towards automatic blacklisting. "stole" / "my video" stay
+# RISKY (human attention) but are too common as casual banter to count as a claim.
+CLAIM_RE = re.compile(r"(copyright|copy right|dmca|take ?down|without (my )?permission|re-?upload|telif)", re.I)
+BLACKLIST_MIN_CLAIMANTS = 3
+BLACKLIST_WINDOW = _dt.timedelta(days=7)
 LINK_RE = re.compile(r"(https?://|www\.|\.com\b|\.ly\b|t\.me/|wa\.me/)", re.I)
 MENTION_RE = re.compile(r"(^|\s)@[\w.]+")
 CTA_RE = re.compile(r"\b(follow|subscribe|link in (my )?bio|dm me|check (out )?my|visit my)\b", re.I)
@@ -189,6 +193,37 @@ def write_reply(session, comment, llm=None):
         return None, str(e)
 
 
+def _norm_handle(name: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (name or "").lower().lstrip("@"))
+
+
+def maybe_blacklist_source(session, comment, post, now=None):
+    """A single risky comment never blacklists a source. Only:
+      * the commenter IS the source (username matches the source handle), or
+      * >= 3 DIFFERENT users made explicit rights claims on this source's clips in 7 days."""
+    import sources_manager
+    from models import Source
+    now = now or utcnow()
+    if not post.source_id:
+        return None
+    src = session.get(Source, post.source_id)
+    if src is None or src.status == "BLACKLISTED":
+        return None
+    handle = _norm_handle(src.handle)
+    if handle and _norm_handle(comment.username) == handle:
+        sources_manager.blacklist_source(session, src.id, f"source owner @{comment.username} complained in comments")
+        return "owner"
+    rows = (session.query(Comment.username, Comment.text).join(Post, Post.id == Comment.post_id)
+            .filter(Post.source_id == src.id, Comment.commented_at >= now - BLACKLIST_WINDOW).all())
+    claimants = {(u or "").lower() for u, t in rows if CLAIM_RE.search(t or "")}
+    claimants.discard("")
+    if len(claimants) >= BLACKLIST_MIN_CLAIMANTS:
+        sources_manager.blacklist_source(session, src.id,
+                                         f"{len(claimants)} different users made rights claims in 7 days")
+        return "claims"
+    return None
+
+
 def decide(session, comment, now=None, rng=None, llm=None, client_factory=client_for) -> str:
     now = now or utcnow()
     rng = rng or random.Random()
@@ -203,13 +238,7 @@ def decide(session, comment, now=None, rng=None, llm=None, client_factory=client
         comment.status, comment.needs_attention = "RISKY", True
         raise_alert("RISKY_COMMENT", f"Risky comment on {acc.ig_username or acc.id} (post {post.id}): "
                     f"“{(comment.text or '')[:300]}”", severity="WARNING", account_id=acc.id, session=session)
-        if COPYRIGHT_RE.search(comment.text or ""):
-            vid = session.get(videos, post.video_id)
-            try:
-                import sources_manager
-                sources_manager.blacklist_source(session, vid.source_id, "copyright/ownership claim in comments")
-            except ImportError:
-                pass
+        maybe_blacklist_source(session, comment, post, now)
         return "RISKY"
     if label == "spam_abuse":
         ok, why = guardrails.can_hide(session, acc, now)

@@ -157,6 +157,55 @@ def run_one_cycle(session, now=None, pipeline_factory=None, llm=None) -> dict:
     return stats
 
 
+class StartupCheckFailed(RuntimeError):
+    pass
+
+
+GPU_RESIDENCY_MIN = 0.99
+
+
+def startup_checks(session, llm=None, ffmpeg_check=None) -> dict:
+    """FFmpeg >= 7 (hard requirement) and the Qwen model fully on GPU (warning only)."""
+    from alerts import raise_alert
+    from media_utils import ffmpeg_version_ok
+    out = {}
+    ok, detail = (ffmpeg_check or ffmpeg_version_ok)()
+    out["ffmpeg"] = detail
+    if not ok:
+        raise_alert("FFMPEG_TOO_OLD", f"FFmpeg check failed: {detail}. The renderer uses `-/filter_complex` "
+                    "(FFmpeg 7.0+). Install a current build (e.g. gyan.dev) and put it on PATH.",
+                    severity="CRITICAL", session=session)
+        raise StartupCheckFailed(f"FFmpeg too old / missing: {detail}")
+    if settings.LLM_BACKEND != "ollama":
+        out["gpu_residency"] = "skipped (mock backend)"
+        return out
+    from gpu_lock import GPUBusy, gpu_job
+    from llm_client import LLMError, get_llm
+    client = llm or get_llm()
+    if not client.health():
+        raise_alert("LLM_UNAVAILABLE", f"Ollama model '{settings.OLLAMA_MODEL}' not available at "
+                    f"{settings.OLLAMA_URL} — run `ollama pull {settings.OLLAMA_MODEL}`",
+                    severity="CRITICAL", email=False, session=session)
+        out["gpu_residency"] = None
+        return out
+    try:
+        with gpu_job("ollama_gpu_check", timeout=600):
+            client.load(keep_alive="2m")
+            share = client.gpu_residency()
+            client.unload()
+    except (GPUBusy, LLMError) as e:
+        log.warning("GPU residency check skipped: %s", e)
+        out["gpu_residency"] = None
+        return out
+    out["gpu_residency"] = share
+    if share is not None and share < GPU_RESIDENCY_MIN:
+        raise_alert("LLM_CPU_OFFLOAD", f"{settings.OLLAMA_MODEL} is only {share:.0%} on GPU (rest on CPU → very "
+                    f"slow). Lower OLLAMA_NUM_CTX (now {settings.OLLAMA_NUM_CTX}), set OLLAMA_FLASH_ATTENTION=1 / "
+                    "OLLAMA_KV_CACHE_TYPE=q8_0, or use qwen3:30b-a3b.", severity="WARNING", email=False,
+                    session=session)
+    return out
+
+
 def main():
     import db_migrate
     import models
@@ -164,6 +213,14 @@ def main():
     import system_state
 
     db_migrate.run(log=log.info)
+    s = models.Session()
+    try:
+        log.info("startup checks: %s", startup_checks(s))
+    except StartupCheckFailed as e:
+        log.error("%s — cycle runner not started", e)
+        raise SystemExit(2)
+    finally:
+        s.close()
     power.prevent_sleep()
     system_state.register_service("cycle_runner")
     while True:

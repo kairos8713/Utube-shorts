@@ -95,6 +95,8 @@ def _base_args() -> list:
         args += ["--js-runtimes", f"node:{settings.NODE_PATH}", "--remote-components", "ejs:github"]
     if os.path.exists(settings.COOKIES_PATH):
         args += ["--cookies", settings.COOKIES_PATH]
+    if settings.POT_PROVIDER_URL:      # bgutil PO-token server on a non-default address
+        args += ["--extractor-args", f"youtubepot-bgutilhttp:base_url={settings.POT_PROVIDER_URL}"]
     return args
 
 
@@ -120,7 +122,8 @@ def download_youtube_video(url: str, out_dir: str = None, max_height: int = 1080
     if os.path.exists(video_path) and os.path.getsize(video_path) > 1_000_000:
         return video_path
     cmd = _base_args() + [
-        "--extractor-args", "youtube:player_client=android_vr,web,tv",
+        # PO-Token-Guide (2026-07): a PO token provider (bgutil) + the mweb client
+        "--extractor-args", f"youtube:player_client={settings.YTDLP_PLAYER_CLIENTS}",
         "-f", f"bestvideo[height<={max_height}][fps<=60]+bestaudio/best[height<={max_height}]/best",
         "--merge-output-format", "mp4", "--no-playlist",
         "-o", video_path, url,

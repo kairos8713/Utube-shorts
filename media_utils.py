@@ -59,6 +59,30 @@ def cleanup_gpu():
     gc.collect()
 
 
+MIN_FFMPEG_MAJOR = 7          # `-/filter_complex <file>` (filter script option) needs FFmpeg 7.0+
+MIN_LIBAVFILTER_MAJOR = 10    # FFmpeg 7.0 ships libavfilter 10.x (git builds print no version number)
+
+
+def ffmpeg_version_ok(version_text: str = None):
+    """(ok, detail). Uses 'ffmpeg version N.M' when present, else the libavfilter major."""
+    if version_text is None:
+        try:
+            r = subprocess.run(["ffmpeg", "-hide_banner", "-version"], capture_output=True, text=True, timeout=20)
+            version_text = r.stdout or ""
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return False, f"ffmpeg not runnable: {e}"
+    m = re.search(r"ffmpeg version n?(\d+)\.(\d+)", version_text)
+    if m:
+        major = int(m.group(1))
+        return major >= MIN_FFMPEG_MAJOR, f"ffmpeg {m.group(1)}.{m.group(2)} (need >= {MIN_FFMPEG_MAJOR}.0)"
+    m = re.search(r"libavfilter\s+(\d+)\.\s*(\d+)", version_text)
+    if m:
+        major = int(m.group(1))
+        return major >= MIN_LIBAVFILTER_MAJOR, \
+            f"libavfilter {m.group(1)}.{m.group(2)} (need >= {MIN_LIBAVFILTER_MAJOR}, i.e. FFmpeg >= {MIN_FFMPEG_MAJOR})"
+    return False, "could not determine the FFmpeg version"
+
+
 def probe(path: str) -> dict:
     r = subprocess.run(["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format",
                         "-show_streams", path], capture_output=True, text=True, timeout=60)
