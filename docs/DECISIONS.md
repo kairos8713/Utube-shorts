@@ -306,3 +306,12 @@ Same inputs for both models (2 real Whisper samples from step A + 10 comments in
   its slot; exactly 8 min apart was deferred once in the 8-day simulation.
 - **Sonuç:** 8-day simulation (20–27 Oct incl. the DST night), 4 accounts × 5 seeds: exactly one post per
   window day, ≥ 14 h apart, 32/32 published at their planned time, 0 days lost.
+
+## D-036 Comment replies in the curator's voice (Emre's decision #3, 2026-10-23)
+- **Karar (details):** opinions in the curator's own voice stay allowed ("I agree…", "I'm not sure…",
+  "I can't say…"); the validator rejects first-person EXPERIENCE/CLAIM patterns (we/us/our, "I don't /
+  always / never / just / did / used to / paid / made…", "I've", "my wife / kids / business / mortgage /
+  show / guest…"), redirects (link, description, bio, DM, full episode/video/interview), "account owner"
+  and off-topic dodges. "full episode" is rejected even inside an honest answer (Emre's list), so a
+  question about the episode name may end without a reply. SOURCE block = channel title + handle +
+  clip topic (the speaker's name is not stored, so it is not given). One retry, then no reply.

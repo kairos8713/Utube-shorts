@@ -10,7 +10,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import common  # noqa: E402
 
 RUN = common.activate()
-common.set_step("F")
+if os.environ.get("FT_DB"):          # re-run on a scratch DB (decisions re-run: F2)
+    os.environ["DATABASE_URL"] = "sqlite:///" + os.environ["FT_DB"].replace("\\", "/")
+RESULT = os.environ.get("FT_RESULT", "F")
+common.set_step(RESULT)
 
 import comment_responder as cr  # noqa: E402
 import models  # noqa: E402
@@ -85,8 +88,8 @@ def main():
                                              s.get(Source, owner_src.id).status_reason],
                             "other_source": [other_src.title, s.get(Source, other_src.id).status]},
               "alerts": [(a.kind, a.message[:120]) for a in s.query(Alert).filter(Alert.kind == "RISKY_COMMENT")],
-              "qwen": common.qwen_stats("F"), "resources": common.sample_resources("F end")}
-    common.save_result("F", result)
+              "qwen": common.qwen_stats(RESULT), "resources": common.sample_resources("F end")}
+    common.save_result(RESULT, result)
     print(json.dumps({k: result[k] for k in ("summary", "classify_and_reply_seconds", "sent", "label_matrix",
                                              "replied_share", "delays_in_40_70", "delay_range", "injection_check",
                                              "blacklist", "qwen")}, indent=1, ensure_ascii=False, default=str))

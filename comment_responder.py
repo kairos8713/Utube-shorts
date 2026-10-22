@@ -53,6 +53,17 @@ BLACKLIST_WINDOW = _dt.timedelta(days=7)
 LINK_RE = re.compile(r"(https?://|www\.|\.com\b|\.ly\b|t\.me/|wa\.me/)", re.I)
 MENTION_RE = re.compile(r"(^|\s)@[\w.]+")
 CTA_RE = re.compile(r"\b(follow|subscribe|link in (my )?bio|dm me|check (out )?my|visit my)\b", re.I)
+# the account is a curator: speaking for the people in the clip ("we found", "I don't ...", "my wife")
+# makes false first-person claims (full test F, 2026-10-22)
+FIRST_PERSON_CLAIM_RE = re.compile(
+    r"\b(we|we've|we're|we'd|we'll|us|our|ours)\b"
+    r"|\bI (don't|do not|didn't|always|never|just|did|do|used to|was|went|paid|make|made|had|have been)\b"
+    r"|\bI've\b"
+    r"|\bmy (wife|husband|partner|kids?|family|mom|dad|son|daughter|business|money|mortgage|house|job|"
+    r"story|book|show|podcast|guest|clients?)\b", re.I)
+REDIRECT_RE = re.compile(r"\b(links?|description|bio|dms?|direct message|full (episode|video|interview)|"
+                         r"account owner)\b", re.I)
+DODGE_RE = re.compile(r"(doesn'?t (quite )?match the topic|off[- ]topic|not related to (this|the) (clip|topic))", re.I)
 
 
 # ── fetching ─────────────────────────────────────────────────────────────────
@@ -142,10 +153,16 @@ def classify_comment(session, comment, llm=None) -> str:
 
 # ── replies ──────────────────────────────────────────────────────────────────
 
-_REPLY_ROLE = """You reply, as the account owner, to ONE comment under a short clip. Write ONE short
-natural sentence (max 120 characters) that responds to the comment using only what is in the clip
-transcript and caption. Never invent facts, numbers or names that are not in the clip. No links,
-no @mentions, no hashtags, no asking people to follow/subscribe, no emojis spam (max 1)."""
+_REPLY_ROLE = """You reply to ONE comment under a short clip, as the CURATOR account that shared the clip.
+The people speaking in the clip are NOT you: they are from the source channel in the SOURCE block.
+Never speak for them in the first person ("I", "we", "our", "my wife"): refer to them in the third
+person ("he says...", "the guest argues...", "they explain..."). Write ONE short natural sentence
+(max 120 characters) that responds to the comment using only what is in the clip transcript,
+caption and SOURCE block. If the comment asks something the clip does not answer (a name, a book,
+the episode title, what happened next), say briefly and honestly that the clip doesn't say.
+Never invent facts, numbers or names. Do not turn a question down as off-topic: answer what you can.
+No links, no pointing to a description / bio / DM / "full episode", no @mentions, no hashtags,
+no asking people to follow/subscribe, no emojis spam (max 1)."""
 _REPLY_SPEC = '{"reply": "<one sentence>"}'
 
 
@@ -164,12 +181,32 @@ def reply_problems(reply: str, context_text: str, previous: list) -> list:
         errs.append("no follow/subscribe calls")
     if "#" in r:
         errs.append("no hashtags")
+    flat = r.replace("\u2019", "'")
+    if FIRST_PERSON_CLAIM_RE.search(flat):
+        errs.append("you are the curator: talk about the people in the clip in the third person, no I/we/our")
+    if REDIRECT_RE.search(flat):
+        errs.append("no links, description, bio, DM, full-episode or account-owner references")
+    if DODGE_RE.search(flat):
+        errs.append("do not turn the question down as off-topic")
     nums = re.findall(r"\d[\d.,]*", r)
     if any(n.strip(".,") not in (context_text or "") for n in nums):
         errs.append("numbers not present in the clip")
     if any(caption_similarity(r, p) >= REPLY_SIMILARITY_MAX for p in previous):
         errs.append("too similar to an earlier reply")
     return errs
+
+
+def source_info(session, post, vid) -> str:
+    """Who is speaking in the clip, so the model knows whom it must NOT speak for."""
+    from models import Source
+    src = session.get(Source, post.source_id) if post.source_id else None
+    parts = []
+    if src is not None:
+        parts.append(f"Source channel on YouTube: {src.title or '?'}" + (f" (@{src.handle})" if src.handle else ""))
+    parts.append("The people speaking in the clip are from that channel; this account only shares the clip.")
+    if vid.topic:
+        parts.append(f"Clip topic: {vid.topic}")
+    return "\n".join(parts)
 
 
 def write_reply(session, comment, llm=None):
@@ -179,14 +216,16 @@ def write_reply(session, comment, llm=None):
     context = f"{vid.transcript or ''}\n{vid.caption or ''}"
     previous = [r.text for r in session.query(CommentReply).filter_by(owned_channel_id=comment.owned_channel_id)
                 .order_by(CommentReply.id.desc()).limit(100).all()]
-    user = "\n\n".join([data_block("CLIP_TRANSCRIPT", vid.transcript or "", 3000),
+    user = "\n\n".join([data_block("SOURCE", source_info(session, post, vid), 400),
+                        data_block("CLIP_TRANSCRIPT", vid.transcript or "", 3000),
                         data_block("CAPTION", vid.caption or "", 800),
                         data_block("COMMENT", comment.text, 1000),
                         "Write the reply JSON."])
     msgs = [{"role": "system", "content": system_prompt(_REPLY_ROLE, _REPLY_SPEC)},
             {"role": "user", "content": user}]
     try:
-        obj = llm.chat_json(msgs, task="comment_reply", max_tokens=80, temperature=0.8,
+        # a rejected reply gets ONE more try; after that no reply at all
+        obj = llm.chat_json(msgs, task="comment_reply", max_tokens=80, temperature=0.8, retries=1,
                             validator=lambda o: reply_problems(o.get("reply", ""), context, previous))
         return obj["reply"].strip(), None
     except LLMError as e:

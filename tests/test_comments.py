@@ -144,3 +144,49 @@ def test_every_classification_is_logged(db, setup):
     _comment(db, a, p, "🔥🔥")
     cr.process_new(db, NOW, random.Random(9), client_factory=lambda acc: ig)
     assert db.query(Decision).filter_by(task="comment_classify").count() == 1
+
+
+# ── decision #3: the account is a curator, never speaks for the people in the clip ──
+
+FT_CTX = ("Me and my wife, we don't go on vacations. We only go on business trips. And I used to charge 1% "
+          "for an index fund you can buy in three minutes. The math on the 1% fee hasn't changed.")
+
+
+@pytest.mark.parametrize("bad", [
+    "I get that, but we found paying off the mortgage early helped us lower our cost of living.",
+    "I don't actually say no to opportunities; I just make sure every single trip is structured as a business expense first.",
+    "I'm not sure about the specific episode title, but check out the link in the description.",
+    "The guest is the account owner, who shares this self-employed strategy.",
+    "That question doesn't quite match the topic of our emotional triggers in this clip.",
+])
+def test_full_test_bad_replies_are_rejected(bad):
+    """The bad replies from the full test (FULL_TEST_REPORT §5, F)."""
+    assert cr.reply_problems(bad, FT_CTX, [])
+
+
+def test_full_test_good_reply_passes():
+    good = "The math on the 1% fee hasn't changed, and you can still buy index funds yourself in under three minutes."
+    assert cr.reply_problems(good, FT_CTX, []) == []
+    assert cr.reply_problems("He says he only takes business trips, never plain vacations.", FT_CTX, []) == []
+    assert cr.reply_problems("I'm not sure, the clip doesn't name the book.", FT_CTX, []) == []   # honest unknown
+
+
+def test_reply_prompt_carries_source_block_and_retries_once(db, setup):
+    """Real OllamaClient retry logic (fake HTTP): a first-person reply is rejected, ONE retry, then no reply."""
+    from models import Source
+    from test_llm import chat_reply, make
+    a, p, _, ig = setup
+    src = Source(channel_url="https://www.youtube.com/@MoneyGuyShow", title="The Money Guy Show",
+                 handle="MoneyGuyShow", status="TRIAL", sector_id=a.sector_id)
+    db.add(src)
+    db.commit()
+    p.source_id = src.id
+    db.commit()
+    c = _comment(db, a, p, "Did they ever say how long it took?")
+    client, t = make([chat_reply('{"reply": "We paid it off in three years."}')] * 3)
+    text, err = cr.write_reply(db, c, llm=client)
+    assert text is None and "third person" in err
+    assert len(t.calls) == 2                                                          # first try + 1 retry
+    msgs = t.calls[0][2]["messages"]
+    assert "CURATOR" in msgs[0]["content"]
+    assert "<<<DATA SOURCE" in msgs[1]["content"] and "The Money Guy Show (@MoneyGuyShow)" in msgs[1]["content"]
