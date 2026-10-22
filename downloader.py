@@ -63,6 +63,20 @@ def classify_ytdlp_error(stderr: str):
     return DownloadError(stderr[-500:] if stderr else "yt-dlp failed")
 
 
+BLOCKED_HINTS = {
+    "BOT_CHECK": "YouTube bot check — pause downloads for a while and check the IP (docs/YTDLP_FIX.md).",
+    "COOKIES": "cookie failure — the working set-up runs WITHOUT cookies: clear YTDLP_COOKIES / cookies.txt "
+               "(docs/YTDLP_FIX.md).",
+    "FORBIDDEN_403_PO_TOKEN": "403 / PO token — update yt-dlp + yt-dlp-ejs in .venv and check deno and the "
+                              "PO-token provider (scripts/setup_venv.ps1, docs/YTDLP_FIX.md). Cookies do not help.",
+}
+
+
+def blocked_hint(kind: str) -> str:
+    """What Emre should do for a YouTubeBlocked kind (alert / e-mail text)."""
+    return BLOCKED_HINTS.get(kind, "see docs/YTDLP_FIX.md")
+
+
 def cookies_age_days() -> float:
     path = settings.COOKIES_PATH
     if not os.path.exists(path):

@@ -133,7 +133,7 @@ def run_one_cycle(session, now=None, pipeline_factory=None, llm=None) -> dict:
                      stage_seconds=result.stage_seconds)
         if result.blocked:
             raise_alert("YOUTUBE_BLOCKED", f"YouTube blocked downloads ({result.blocked}). Downloads stopped "
-                        f"for this cycle — refresh cookies.txt / check the IP.", severity="CRITICAL",
+                        f"for this cycle — {downloader.blocked_hint(result.blocked)}", severity="CRITICAL",
                         session=session)
             stats["youtube_blocked"] = result.blocked
     # 4. assignment + schedule
