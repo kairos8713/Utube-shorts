@@ -10,11 +10,14 @@ import datetime as _dt
 from typing import Optional, Tuple
 
 from system_state import emergency_stopped
-from timeutil import utcnow
+from timeutil import to_local, utcnow, window_for
 
 # ── constants ────────────────────────────────────────────────────────────────
-DAILY_CAP_START = 1                    # posts / account / rolling 24 h for new accounts
+DAILY_CAP_START = 1                    # posts / account / posting-window day for new accounts
 DAILY_CAP_ABSOLUTE_MAX = 2             # never more, whatever Qwen proposes
+# least time between two posts of the SAME account, by its daily cap (Emre 2026-10-23: replaces the
+# rolling 24 h count, which clashed with a random minute inside the slot)
+MIN_GAP_SAME_ACCOUNT = {1: _dt.timedelta(hours=14), 2: _dt.timedelta(hours=6)}
 CAP_2_MIN_ACTIVE_DAYS = 14             # cap 2 only after ≥14 healthy active days
 MIN_GAP_BETWEEN_POSTS = _dt.timedelta(minutes=8)    # system-wide, across accounts
 WARMUP = _dt.timedelta(days=2)         # ig_setup_completed_at + 2 days before the first post
@@ -32,8 +35,9 @@ ACCOUNT_STATUSES = ("ACTIVE", "PAUSED", "PAUSED_AUTO", "WARMUP", "DISCONNECTED")
 
 def describe() -> list:
     return [
-        ("DAILY_CAP_START", DAILY_CAP_START, "Yeni hesap: 24 saatte en fazla paylaşım"),
-        ("DAILY_CAP_ABSOLUTE_MAX", DAILY_CAP_ABSOLUTE_MAX, "Mutlak üst sınır (24 saat)"),
+        ("DAILY_CAP_START", DAILY_CAP_START, "Yeni hesap: yayın-penceresi günü (Warsaw, pencerenin başladığı tarih) başına en fazla paylaşım"),
+        ("DAILY_CAP_ABSOLUTE_MAX", DAILY_CAP_ABSOLUTE_MAX, "Mutlak üst sınır (pencere günü başına)"),
+        ("MIN_GAP_SAME_ACCOUNT", "cap 1: 14 saat · cap 2: 6 saat", "Aynı hesabın iki paylaşımı arası en az süre"),
         ("CAP_2_MIN_ACTIVE_DAYS", CAP_2_MIN_ACTIVE_DAYS, "2/gün için en az aktif + sağlıklı gün"),
         ("MIN_GAP_BETWEEN_POSTS", "8 dk", "Sistem genelinde iki paylaşım arası en az süre"),
         ("WARMUP", "2 gün", "ig_setup_completed_at + 2 gün dolmadan paylaşım yok"),
@@ -125,32 +129,63 @@ def validate_cap_change(session, account, new_cap, now: _dt.datetime = None) -> 
 
 # ── publishing ───────────────────────────────────────────────────────────────
 
-CAP_WINDOW = _dt.timedelta(hours=24)   # the daily cap is counted over this rolling window
 CAP_COUNTED_STATUSES = ("PUBLISHED", "CONTAINER", "UNKNOWN")
 
 
-def posts_last_24h(session, account_id: int, now: _dt.datetime = None) -> int:
-    from models import Post
+def min_gap_same_account(cap: int) -> _dt.timedelta:
+    """Least time between two posts of one account for its daily cap."""
+    return MIN_GAP_SAME_ACCOUNT.get(cap, MIN_GAP_SAME_ACCOUNT[DAILY_CAP_ABSOLUTE_MAX])
+
+
+def cap_day(account, now: _dt.datetime = None) -> _dt.date:
+    """The posting-window day the daily cap counts `now` in: the window that started most recently
+    (15:00–05:00 crosses midnight, so the day is the window's start date; 05:00–15:00 still belongs to
+    the window that just ended)."""
     now = now or utcnow()
-    return (session.query(Post)
-            .filter(Post.owned_channel_id == account_id, Post.status.in_(CAP_COUNTED_STATUSES),
-                    Post.created_at >= now - CAP_WINDOW).count())
+    loc = to_local(now).date()
+    return max(d for d in (loc - _dt.timedelta(days=1), loc) if window_for(d, account.posting_window)[0] <= now)
 
 
-def cap_frees_at(session, account, now: _dt.datetime = None) -> Optional[_dt.datetime]:
-    """Earliest time can_publish's daily-cap check passes again for this account (now if it already does,
-    None with a zero cap)."""
+def cap_day_bounds(account, day: _dt.date):
+    """[start of that day's window, start of the next day's window) in UTC."""
+    return window_for(day, account.posting_window)[0], window_for(day + _dt.timedelta(days=1),
+                                                                    account.posting_window)[0]
+
+
+def _counted_posts(session, account_id: int, since: _dt.datetime, until: _dt.datetime = None):
     from models import Post
+    q = session.query(Post.created_at).filter(Post.owned_channel_id == account_id,
+                                              Post.status.in_(CAP_COUNTED_STATUSES), Post.created_at >= since)
+    if until is not None:
+        q = q.filter(Post.created_at < until)
+    return sorted(r[0] for r in q.all() if r[0])
+
+
+def posts_in_cap_day(session, account, now: _dt.datetime = None) -> int:
+    lo, hi = cap_day_bounds(account, cap_day(account, now))
+    return len(_counted_posts(session, account.id, lo, hi))
+
+
+def last_account_post_time(session, account_id: int, now: _dt.datetime = None) -> Optional[_dt.datetime]:
+    now = now or utcnow()
+    times = _counted_posts(session, account_id, now - _dt.timedelta(days=2))
+    return times[-1] if times else None
+
+
+def next_allowed_post_time(session, account, now: _dt.datetime = None) -> Optional[_dt.datetime]:
+    """Earliest time ≥ now at which the daily cap AND the same-account gap pass (None with a zero cap).
+    May fall outside the posting window — the caller moves it into the next window."""
     now = now or utcnow()
     cap = effective_cap(session, account, now)
     if cap <= 0:
         return None
-    times = sorted(r[0] for r in session.query(Post.created_at).filter(
-        Post.owned_channel_id == account.id, Post.status.in_(CAP_COUNTED_STATUSES),
-        Post.created_at >= now - CAP_WINDOW).all())
-    if len(times) < cap:
-        return now
-    return times[len(times) - cap] + CAP_WINDOW + _dt.timedelta(minutes=1)
+    t = now
+    if posts_in_cap_day(session, account, now) >= cap:
+        t = cap_day_bounds(account, cap_day(account, now))[1]          # next window day
+    last = last_account_post_time(session, account.id, now)
+    if last is not None:
+        t = max(t, last + min_gap_same_account(cap))
+    return t
 
 
 def last_global_post_time(session) -> Optional[_dt.datetime]:
@@ -177,9 +212,14 @@ def can_publish(session, account, now: _dt.datetime = None, video=None) -> Tuple
     if account.ig_token_expires_at and account.ig_token_expires_at <= now:
         return False, "access token expired"
     cap = effective_cap(session, account, now)
-    used = posts_last_24h(session, account.id, now)
+    used = posts_in_cap_day(session, account, now)
     if used >= cap:
-        return False, f"daily cap reached ({used}/{cap} in 24 h)"
+        return False, f"daily cap reached ({used}/{cap} in window day {cap_day(account, now)})"
+    last = last_account_post_time(session, account.id, now)
+    gap = min_gap_same_account(cap)
+    if last is not None and now - last < gap:
+        return False, (f"same-account gap: last post {(now - last).total_seconds() / 3600:.1f} h ago "
+                       f"(min {gap.total_seconds() / 3600:.0f} h at cap {cap})")
     last = last_global_post_time(session)
     if last and now - last < MIN_GAP_BETWEEN_POSTS:
         return False, f"global 8-minute gap (last post {int((now - last).total_seconds())}s ago)"

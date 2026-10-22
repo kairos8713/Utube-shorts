@@ -138,33 +138,42 @@ def test_startup_alerts_items_stuck_in_publishing(db, two_queued, age, alerted):
     assert (db.query(Alert).filter_by(kind="PUBLISH_STUCK", severity="CRITICAL").count() == 1) is alerted
 
 
-# ── daily cap hit: retry when the rolling 24 h cap frees up, not a day later ──
+# ── daily cap per posting-window day + same-account gap (decision #2) ──
 
-def test_cap_frees_at_counts_like_can_publish(db):
-    import guardrails
-    from helpers import post
-    a = account(db, "capfree")
-    assert guardrails.cap_frees_at(db, a, NOW) == NOW
-    post(db, a, video(db, a, url="cf"), published_at=NOW - dt.timedelta(hours=21))
-    assert guardrails.cap_frees_at(db, a, NOW) == NOW + dt.timedelta(hours=3, minutes=1)
-
-
-def test_defer_cap_waits_until_cap_frees_inside_window(db, two_queued):
+def test_next_window_day_post_21h_later_is_allowed(db, two_queued):
+    """Under the old rolling 24 h this was DEFER_CAP (full test D/E): 19:00 → next day 16:00 Warsaw."""
     from helpers import post
     a, _, (q, _) = two_queued
     post(db, a, video(db, a, url="earlier"), published_at=NOW - dt.timedelta(hours=21))
+    assert _pub(db, q) == "PUBLISHED"
+
+
+def test_same_account_gap_defers_to_last_post_plus_14h(db, two_queued):
+    import guardrails
+    from helpers import post
+    a, _, (q, _) = two_queued
+    post(db, a, video(db, a, url="morning"), published_at=NOW - dt.timedelta(hours=10))   # 06:00 Warsaw, yesterday's window day
+    assert guardrails.posts_in_cap_day(db, a, NOW) == 0
     assert _pub(db, q) == "DEFER_CAP"
-    # 17:01 UTC = 19:01 Warsaw, same evening — previously the start of tomorrow's window (+23 h)
-    assert q.status == "PENDING" and q.scheduled_for == NOW + dt.timedelta(hours=3, minutes=1)
+    assert q.status == "PENDING" and q.scheduled_for == NOW + dt.timedelta(hours=4)       # 20:00 Warsaw, same evening
     assert publish_item(db, q, now=q.scheduled_for, client_factory=lambda acc, **k: FakeIG(), host=FakeHost(),
                         sleep=lambda s: None) == "PUBLISHED"
 
 
-def test_defer_cap_outside_window_goes_to_next_window_start(db, two_queued):
+def test_full_window_day_defers_to_next_window_start(db, tmp_path):
+    import guardrails
     from helpers import post
-    a, _, (q, _) = two_queued
-    now = dt.datetime(2026, 10, 20, 2, 30)                    # 04:30 Warsaw, window closes 05:00
-    post(db, a, video(db, a, url="late"), published_at=dt.datetime(2026, 10, 19, 3, 20))
+    a = account(db, "cap2", cap=2, active_days=30)
+    f = tmp_path / "c.mp4"
+    f.write_bytes(b"0" * 1000)
+    q = UploadQueue(owned_channel_id=a.id, video_id=video(db, a, url="q", path=str(f)).id, status="PENDING",
+                    scheduled_for=dt.datetime(2026, 10, 21, 1, 0))
+    db.add(q)
+    db.commit()
+    for i, t in enumerate((dt.datetime(2026, 10, 20, 13, 10), dt.datetime(2026, 10, 20, 19, 30))):  # 15:10, 21:30 Warsaw
+        post(db, a, video(db, a, url=f"p{i}"), published_at=t)
+    now = dt.datetime(2026, 10, 21, 1, 0)                                         # 03:00 Warsaw, same window day
+    assert guardrails.effective_cap(db, a, now) == 2 and guardrails.posts_in_cap_day(db, a, now) == 2
     assert publish_item(db, q, now=now, client_factory=lambda acc, **k: FakeIG(), host=FakeHost(),
                         sleep=lambda s: None) == "DEFER_CAP"
-    assert q.scheduled_for == dt.datetime(2026, 10, 20, 13, 0)   # cap frees 05:21 Warsaw → 15:00 Warsaw
+    assert q.scheduled_for == dt.datetime(2026, 10, 21, 13, 0)                   # next window, 15:00 Warsaw

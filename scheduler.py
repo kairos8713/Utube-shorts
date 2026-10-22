@@ -12,7 +12,9 @@ Per cycle:
   3. placement: exactly EXPLORE_SHARE (25 %) of an account's posts go to slots
      Qwen did NOT pick (slot_source="explore"), the rest to Qwen's slots
      ("qwen") or, without a plan, to any slot ("default"). Random minute inside
-     the slot, ≥ 8 min from every other scheduled post (all accounts).
+     the slot, ≥ 8 min from every other scheduled post (all accounts), at most the account's cap per
+     posting-window day and ≥ MIN_GAP_SAME_ACCOUNT (cap 1: 14 h, cap 2: 6 h) from the account's other
+     posts — the same rules guardrails.can_publish checks, so a planned post is never deferred.
 Missed posts (PC was off): spread over the rest of today's window within the
 day's capacity; otherwise appended to the end of the account's queue.
 """
@@ -37,6 +39,9 @@ HORIZON_DAYS = 6                # 2 cycles
 LEAD = _dt.timedelta(minutes=10)
 MISSED_GRACE = _dt.timedelta(minutes=15)
 PLAN_MAX_AGE = _dt.timedelta(days=7)
+# planned posts keep the global 8-min gap + 2 min: a publish stamps its time a little after the slot
+# (uploads take minutes), so posts exactly 8 min apart would be deferred at publish time
+PLAN_GLOBAL_GAP = guardrails.MIN_GAP_BETWEEN_POSTS + _dt.timedelta(minutes=2)
 QUEUED_STATES = ("PENDING", "PUBLISHING", "HELD", "UPLOADED")
 
 
@@ -117,16 +122,34 @@ def taken_times(session) -> list:
     return sorted(r[0] for r in rows if r[0])
 
 
-def pick_time(start, end, taken, rng, attempts: int = 40):
+def pick_time(start, end, taken, rng, attempts: int = 40, ok=None):
     span = (end - start).total_seconds()
     if span <= 60:
         return None
     for _ in range(attempts):
         t = start + _dt.timedelta(seconds=rng.uniform(30, span - 30))
         t = t.replace(second=0, microsecond=0)
-        if all(abs((t - x).total_seconds()) >= guardrails.MIN_GAP_BETWEEN_POSTS.total_seconds() for x in taken):
+        if all(abs(t - x) >= PLAN_GLOBAL_GAP for x in taken) and (ok is None or ok(t)):
             return t
     return None
+
+
+def account_post_times(session, acc_id: int, now) -> list:
+    """The account's posts as the guardrails see them: counted posts (created_at) + queued items (slot)."""
+    from models import Post
+    times = {}
+    for p in session.query(Post).filter(Post.owned_channel_id == acc_id,
+                                        Post.status.in_(guardrails.CAP_COUNTED_STATUSES),
+                                        Post.created_at >= now - _dt.timedelta(days=2)).all():
+        times[("q", p.queue_id) if p.queue_id else ("p", p.id)] = p.created_at
+    for q in session.query(UploadQueue).filter(UploadQueue.owned_channel_id == acc_id,
+                                               UploadQueue.status.in_(("PENDING", "PUBLISHING"))).all():
+        times.setdefault(("q", q.id), q.scheduled_for)
+    return [t for t in times.values() if t]
+
+
+def _gap_ok(times, gap):
+    return lambda t: all(abs(t - x) >= gap for x in times)
 
 
 def explore_due(session, account_id: int) -> bool:
@@ -166,8 +189,10 @@ def schedule_account(session, acc, now=None, rng=None, horizon_days: int = HORIZ
     if ready is None:
         return 0
     cap = _cap_for(session, acc, now)
+    gap = guardrails.min_gap_same_account(cap)
     plan = qwen_slots(session, acc.id, now)
     taken = taken_times(session)
+    acc_times = account_post_times(session, acc.id, now)
     created = 0
     first_day = to_local(now).date() - _dt.timedelta(days=1)
     for d in range(horizon_days + 1):          # yesterday's window (may still be open) + horizon
@@ -181,9 +206,11 @@ def schedule_account(session, acc, now=None, rng=None, horizon_days: int = HORIZ
                                                   UploadQueue.status.in_(("PENDING", "PUBLISHING", "UPLOADED")),
                                                   UploadQueue.scheduled_for >= w_start,
                                                   UploadQueue.scheduled_for < w_end).count())
-        avail = [(k, max(s, now + LEAD, ready), e) for k, s, e in slots_for(day, acc.posting_window)
-                 if e > max(now + LEAD, ready) + _dt.timedelta(minutes=5)]
         for _ in range(max(0, cap - used)):
+            earlier = [x for x in acc_times if x <= w_end]
+            floor = max([now + LEAD, ready] + ([max(earlier) + gap] if earlier else []))
+            avail = [(k, max(s, floor), e) for k, s, e in slots_for(day, acc.posting_window)
+                     if e > floor + _dt.timedelta(minutes=5)]
             if not todo or not avail:
                 break
             explore = explore_due(session, acc.id)
@@ -200,7 +227,7 @@ def schedule_account(session, acc, now=None, rng=None, horizon_days: int = HORIZ
             rng.shuffle(pool)
             t = None
             for k, s, e in pool:
-                t = pick_time(s, e, taken, rng)
+                t = pick_time(s, e, taken, rng, ok=_gap_ok(acc_times, gap))
                 if t:
                     break
             if not t:
@@ -211,6 +238,7 @@ def schedule_account(session, acc, now=None, rng=None, horizon_days: int = HORIZ
                                     cycle_id=v.cycle_id))
             session.flush()
             taken.append(t)
+            acc_times.append(t)
             created += 1
     session.commit()
     return created
@@ -238,16 +266,31 @@ def reschedule_missed(session, now=None, rng=None) -> dict:
             pending_today = (session.query(UploadQueue).filter(
                 UploadQueue.owned_channel_id == acc_id, UploadQueue.status == "PENDING",
                 UploadQueue.scheduled_for >= now - MISSED_GRACE, UploadQueue.scheduled_for < w_end).count())
-            room = max(0, _cap_for(session, acc, now) - guardrails.posts_last_24h(session, acc_id, now) - pending_today)
+            room = max(0, _cap_for(session, acc, now) - guardrails.posts_in_cap_day(session, acc, now)
+                       - pending_today)
         taken = [t for t in taken_times(session) if t >= now]
-        spread = items[:room]
-        if spread and w_end:
-            step = (w_end - LEAD - now) / (len(spread) + 1)
-            for i, it in enumerate(spread):
-                s = now + LEAD / 2 + step * i
-                t = pick_time(s, s + step, taken, rng) or (s + step / 2)
+        cap = _cap_for(session, acc, now)
+        gap = guardrails.min_gap_same_account(cap)
+        others = [t for t in account_post_times(session, acc_id, now) if t not in {i.scheduled_for for i in items}]
+        spread = []
+        if room and w_end:
+            # one after another, each ≥ gap after the account's previous post, all inside today's window
+            hi = w_end - LEAD
+            for it in items[:room]:
+                earlier = [x for x in others if x <= hi]
+                lo = max([now + LEAD / 2] + ([max(earlier) + gap] if earlier else []))
+                left = min(room, len(items)) - len(spread)
+                latest = hi - gap * (left - 1)
+                if latest - lo < _dt.timedelta(minutes=2):
+                    break
+                t = (pick_time(lo, lo + (latest - lo) / left, taken, rng, ok=_gap_ok(others, gap))
+                     or pick_time(lo, latest, taken, rng, ok=_gap_ok(others, gap)))
+                if t is None:
+                    break
                 it.scheduled_for = t
                 taken.append(t)
+                others.append(t)
+                spread.append(it)
                 out["respread"] += 1
         for it in items[len(spread):]:
             session.delete(it)                    # video becomes unscheduled → end of the queue

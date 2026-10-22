@@ -292,3 +292,17 @@ Same inputs for both models (2 real Whisper samples from step A + 10 comments in
   replaced by the 0.12 s one (it would swallow the now complete last word).
 - **Gerçek veri (C'nin Jay Shetty klipleri):** 2/3 now end on a full sentence ("…long after the story
   ends.", "…already within you."), 1/3 rejected (no sentence end within +4/−3 s); render + QC pass.
+
+## D-035 Daily cap per posting-window day + same-account gap (Emre's decision #2, 2026-10-23)
+- **Kural (Emre):** cap = N posts per account per Warsaw posting-window day (day = the window's start
+  date); `MIN_GAP_SAME_ACCOUNT` cap 1 → 14 h, cap 2 → 6 h; the global 8 min stays; Qwen cannot change
+  any of it. Replaces the rolling 24 h count (D-032).
+- **Karar (details):** outside the window (05:00–15:00) a post counts in the window that started most
+  recently, so a late publish cannot open a "new day". `can_publish` checks both rules; on either the
+  publisher defers to the earliest time both pass (inside the window, else the next window start).
+  The scheduler applies the same rules when planning (random minute kept, slot clipped to
+  "previous post + gap", later posts checked too) and so does the missed-post re-spread. The planner
+  keeps planned posts 10 min apart (8 min guardrail + 2 min) because a publish is stamped a little after
+  its slot; exactly 8 min apart was deferred once in the 8-day simulation.
+- **Sonuç:** 8-day simulation (20–27 Oct incl. the DST night), 4 accounts × 5 seeds: exactly one post per
+  window day, ≥ 14 h apart, 32/32 published at their planned time, 0 days lost.

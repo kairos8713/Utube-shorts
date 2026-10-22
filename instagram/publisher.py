@@ -119,10 +119,10 @@ def next_window_start(acc, now):
 
 
 def cap_defer_time(session, acc, now):
-    """Daily cap hit (the post ran late): retry as soon as the rolling 24 h cap frees up — inside the
-    posting window — instead of a whole day later on top of the next day's planned post."""
+    """Daily cap or same-account gap hit (the post ran late or was moved): retry at the earliest time both
+    rules allow — inside the posting window, else at the next window start."""
     from timeutil import to_local, window_day_of, window_for
-    t = guardrails.cap_frees_at(session, acc, now)
+    t = guardrails.next_allowed_post_time(session, acc, now)
     if t is None:
         return next_window_start(acc, now)
     t = max(t, now)
@@ -153,7 +153,7 @@ def publish_item(session, item: UploadQueue, now=None, client_factory=None, host
     if not ok:
         if "8-minute" in why:
             return "DEFER_GAP"
-        if "daily cap" in why:
+        if "daily cap" in why or "same-account gap" in why:
             item.scheduled_for = cap_defer_time(session, acc, now)
             session.commit()
             return "DEFER_CAP"

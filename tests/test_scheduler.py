@@ -129,3 +129,45 @@ def test_publish_due_keeps_8_minute_gap(db, tmp_path):
     assert [o for _, o in out2] == ["DEFER_GAP"]
     waiting = db.query(UploadQueue).filter_by(status="PENDING").one()
     assert waiting.scheduled_for >= NOW + guardrails.MIN_GAP_BETWEEN_POSTS
+
+
+def test_eight_day_simulation_one_post_per_window_day_14h_gap_no_day_lost(db, tmp_path):
+    """Decision #2: cap per Warsaw posting-window day + MIN_GAP_SAME_ACCOUNT, random minute in the slot.
+    8 window days (20–27 Oct, incl. the DST night of 25 Oct), 4 accounts, 5 seeds: every account gets
+    exactly one post on every window day, ≥ 14 h apart, and every planned post publishes on time."""
+    from collections import Counter
+    sec = sector(db)
+    from models import Post
+    for seed in range(5):
+        db.query(Post).delete()                  # each seed replays the same 8 days from scratch
+        db.query(UploadQueue).delete()
+        db.commit()
+        accs = [account(db, f"sim{seed}_{i}", sector_obj=sec) for i in range(4)]
+        for a in accs:
+            for i in range(10):
+                f = tmp_path / f"{a.name}_{i}.mp4"
+                f.write_bytes(b"0" * 100)
+                video(db, a, url=f"{a.name}-{i}", path=str(f))
+        rng = random.Random(seed)
+        for a in accs:
+            assert scheduler.schedule_account(db, a, NOW, rng, horizon_days=8) == 8
+        items = [q for a in accs for q in _queue(db, a.id)]
+        outcomes = []
+        for t in sorted({q.scheduled_for for q in items}):
+            outcomes += [o for _, o in publish_due(db, t, random.Random(1), client_factory=lambda acc, **k: FakeIG(),
+                                                   host=FakeHost(), sleep=lambda s: None)]
+        assert outcomes == ["PUBLISHED"] * 32, Counter(outcomes)          # no DEFER_CAP / DEFER_GAP
+        for a in accs:
+            times = sorted(q.scheduled_for for q in _queue(db, a.id))
+            days = [window_day_of(t) for t in times]
+            assert days == [dt.date(2026, 10, 20) + dt.timedelta(days=d) for d in range(8)]   # 0 days lost
+            assert min(b - x for x, b in zip(times, times[1:])) >= dt.timedelta(hours=14)
+            assert all(q.status == "UPLOADED" for q in _queue(db, a.id))
+
+
+def test_guardrails_page_shows_the_new_cap_rules():
+    rows = {k: (v, d) for k, v, d in guardrails.describe()}
+    assert "penceresi günü" in rows["DAILY_CAP_START"][1]
+    assert rows["MIN_GAP_SAME_ACCOUNT"][0] == "cap 1: 14 saat · cap 2: 6 saat"
+    assert guardrails.min_gap_same_account(1) == dt.timedelta(hours=14)
+    assert guardrails.min_gap_same_account(2) == dt.timedelta(hours=6)
