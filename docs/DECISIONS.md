@@ -315,3 +315,13 @@ Same inputs for both models (2 real Whisper samples from step A + 10 comments in
   and off-topic dodges. "full episode" is rejected even inside an honest answer (Emre's list), so a
   question about the episode name may end without a reply. SOURCE block = channel title + handle +
   clip topic (the speaker's name is not stored, so it is not given). One retry, then no reply.
+
+## D-037 One 403 no longer stops the cycle (Emre's decision #4, 2026-10-23)
+- **Kural (Emre):** a 403 on one video → wait 60–120 s, retry once with `bv*[vcodec^=avc1][height<=1080]+ba/b`;
+  still 403 → only that video fails. YOUTUBE_BLOCKED (stop downloads + CRITICAL alert) only after 403/bot
+  errors on ≥ 3 different videos within 1 hour; "Sign in to confirm you're not a bot" stays an instant block.
+- **Karar (details):** 429 / "too many requests" count as strikes like 403 (they were instant blocks before);
+  cookie errors stay instant blocks (configuration problem). Strikes are stored in system_state
+  (`yt_forbidden_strikes`, video id + time), so they survive service restarts and are shared by the cycle,
+  discovery samples and the fast lane; the same video counts once. Audio samples (discovery) count strikes
+  but get no format retry. New block kind `FORBIDDEN_403_REPEATED` with its own fix hint.

@@ -66,4 +66,4 @@ def test_classify_ytdlp_errors():
     assert isinstance(classify_ytdlp_error("ERROR: Private video"), VideoUnavailable)
     e = classify_ytdlp_error("WARNING: android_vr client https formats require a GVS PO Token ...\n"
                              "ERROR: unable to download video data: HTTP Error 403: Forbidden")
-    assert isinstance(e, YouTubeBlocked) and e.kind == "FORBIDDEN_403_PO_TOKEN"
+    assert not isinstance(e, YouTubeBlocked) and e.kind == "FORBIDDEN_403"      # one video, not a block

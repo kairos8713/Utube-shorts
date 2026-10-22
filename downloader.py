@@ -1,8 +1,11 @@
 """
 downloader.py — yt-dlp wrappers (download + flat metadata), YouTube health.
 
-* Bot / cookie errors are recognised and raised as YouTubeBlocked so the cycle
-  can stop all downloads and raise an alert instead of hammering YouTube.
+* Bot-check ("sign in to confirm you're not a bot") / cookie errors are raised as YouTubeBlocked at
+  once, so the cycle stops all downloads and raises an alert instead of hammering YouTube.
+* A 403 (or 429) on ONE video is not a block (full test: the same video's audio had downloaded fine):
+  wait 60–120 s, retry once with an avc1 format; still 403 → only that video fails (VideoForbidden).
+  YouTubeBlocked("FORBIDDEN_403_REPEATED") only after ≥ 3 DIFFERENT videos failed so within 1 hour.
 * polite_delay() spreads downloads out in time.
 * yt-dlp self-update runs at most once per cycle (update_ytdlp_once()).
 """
@@ -21,8 +24,14 @@ log = get_logger("downloader")
 
 BOT_HINTS = (
     "sign in to confirm you", "not a bot", "confirm you're not a bot",
-    "http error 429", "too many requests",
 )
+RATE_HINTS = ("http error 429", "too many requests")
+FORBIDDEN_RETRY_FORMAT = "bv*[vcodec^=avc1][height<=1080]+ba/b"
+FORBIDDEN_RETRY_WAIT_S = (60, 120)
+STRIKE_WINDOW_S = 3600
+STRIKES_TO_BLOCK = 3
+_STRIKES_KEY = "yt_forbidden_strikes"
+_sleep = time.sleep                     # tests replace it
 COOKIE_HINTS = (
     "cookies are no longer valid", "the provided youtube account cookies",
     "cookies file", "invalid cookies", "use --cookies",
@@ -49,6 +58,14 @@ class VideoUnavailable(DownloadError):
     pass
 
 
+class VideoForbidden(DownloadError):
+    """403 / 429 on one video: that video fails; repeated on different videos → YouTubeBlocked."""
+
+    def __init__(self, detail: str, kind: str = "FORBIDDEN_403"):
+        super().__init__(f"{kind}: {detail[:300]}")
+        self.kind = kind
+
+
 def classify_ytdlp_error(stderr: str):
     s = (stderr or "").lower()
     if any(h in s for h in BOT_HINTS):
@@ -56,8 +73,9 @@ def classify_ytdlp_error(stderr: str):
     if any(h in s for h in COOKIE_HINTS):
         return YouTubeBlocked("COOKIES", stderr)
     if "http error 403" in s and ("po token" in s or "unable to download video data" in s):
-        # 2026-10: YouTube demands a GVS PO token → every download fails the same way
-        return YouTubeBlocked("FORBIDDEN_403_PO_TOKEN", stderr)
+        return VideoForbidden(stderr, "FORBIDDEN_403")
+    if any(h in s for h in RATE_HINTS):
+        return VideoForbidden(stderr, "RATE_LIMITED_429")
     if any(h in s for h in PRIVATE_HINTS):
         return VideoUnavailable(stderr[:300])
     return DownloadError(stderr[-500:] if stderr else "yt-dlp failed")
@@ -69,6 +87,8 @@ BLOCKED_HINTS = {
                "(docs/YTDLP_FIX.md).",
     "FORBIDDEN_403_PO_TOKEN": "403 / PO token — update yt-dlp + yt-dlp-ejs in .venv and check deno and the "
                               "PO-token provider (scripts/setup_venv.ps1, docs/YTDLP_FIX.md). Cookies do not help.",
+    "FORBIDDEN_403_REPEATED": "403/429 on 3+ different videos within 1 hour — update yt-dlp + yt-dlp-ejs in .venv, "
+                              "check deno and the PO-token provider and the IP (docs/YTDLP_FIX.md). Cookies do not help.",
 }
 
 
@@ -164,6 +184,29 @@ def ytdlp_json(target: str, extra: list = None, timeout: int = 120) -> dict:
     return json.loads(r.stdout or "{}")
 
 
+def record_forbidden(video_id: str, now: float = None) -> int:
+    """Remember a 403/429 failure; returns how many DIFFERENT videos failed so in the last hour."""
+    import system_state
+    now = now or time.time()
+    try:
+        strikes = json.loads(system_state.get(_STRIKES_KEY, "[]") or "[]")
+    except ValueError:
+        strikes = []
+    strikes = [x for x in strikes if now - x.get("at", 0) < STRIKE_WINDOW_S and x.get("video") != video_id]
+    strikes.append({"video": video_id, "at": now})
+    system_state.put(_STRIKES_KEY, json.dumps(strikes))
+    return len({x["video"] for x in strikes})
+
+
+def _forbidden_failure(video_id: str, err: "VideoForbidden"):
+    n = record_forbidden(video_id)
+    if n >= STRIKES_TO_BLOCK:
+        log.error("%s on %d different videos within 1 h → treating YouTube as blocked", err.kind, n)
+        return YouTubeBlocked("FORBIDDEN_403_REPEATED", f"{n} videos in 1 h; last: {err}")
+    log.warning("%s on %s (%d/%d videos in 1 h) — skipping this video", err.kind, video_id, n, STRIKES_TO_BLOCK)
+    return err
+
+
 def video_id_from_url(url: str) -> str:
     m = re.search(r"(?:v=|youtu\.be/|shorts/)([\w-]{6,})", url or "")
     return m.group(1) if m else str(int(time.time()))
@@ -175,26 +218,33 @@ def download_youtube_video(url: str, out_dir: str = None, max_height: int = 1080
     video_path = os.path.join(os.path.abspath(out_dir), f"{video_id_from_url(url)}.mp4")
     if os.path.exists(video_path) and os.path.getsize(video_path) > 1_000_000:
         return video_path
-    cmd = _base_args() + [
-        "-f", f"bestvideo[height<={max_height}][fps<=60]+bestaudio/best[height<={max_height}]/best",
-        "--merge-output-format", "mp4", "--no-playlist",
-        "-o", video_path, url,
-    ]
-    log.info("download %s", url)
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, encoding="utf-8",
-                           errors="replace")
-    except subprocess.TimeoutExpired:
-        raise DownloadError(f"download timed out: {url}")
-    if r.returncode != 0:
+    formats = [f"bestvideo[height<={max_height}][fps<=60]+bestaudio/best[height<={max_height}]/best",
+               FORBIDDEN_RETRY_FORMAT]
+    for attempt, fmt in enumerate(formats):
+        cmd = _base_args() + ["-f", fmt, "--merge-output-format", "mp4", "--no-playlist", "-o", video_path, url]
+        log.info("download %s%s", url, " (retry, avc1 format)" if attempt else "")
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, encoding="utf-8",
+                               errors="replace")
+        except subprocess.TimeoutExpired:
+            raise DownloadError(f"download timed out: {url}")
+        if r.returncode == 0:
+            _wait_stable(video_path)
+            return video_path
         if os.path.exists(video_path):
             try:
                 os.remove(video_path)
             except OSError:
                 pass
-        raise classify_ytdlp_error(r.stderr)
-    _wait_stable(video_path)
-    return video_path
+        err = classify_ytdlp_error(r.stderr)
+        if not isinstance(err, VideoForbidden):
+            raise err
+        if attempt == 0:
+            wait = random.uniform(*FORBIDDEN_RETRY_WAIT_S)
+            log.warning("%s on %s — waiting %.0f s, then one retry with another format", err.kind, url, wait)
+            _sleep(wait)
+            continue
+        raise _forbidden_failure(video_id_from_url(url), err)
 
 
 def download_audio_sample(url: str, start: int = 60, end: int = 240, out_dir: str = None) -> str:
@@ -208,7 +258,8 @@ def download_audio_sample(url: str, start: int = 60, end: int = 240, out_dir: st
                           "--no-playlist", "-o", out, url]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace")
     if r.returncode != 0 or not os.path.exists(out):
-        raise classify_ytdlp_error(r.stderr)
+        err = classify_ytdlp_error(r.stderr)
+        raise _forbidden_failure(video_id_from_url(url), err) if isinstance(err, VideoForbidden) else err
     return out
 
 
