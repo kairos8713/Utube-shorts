@@ -277,3 +277,18 @@ Same inputs for both models (2 real Whisper samples from step A + 10 comments in
 - C measured ~219 s of machine time per reel (download+Whisper+Qwen+render+RIFE+QC). 60 reels per 3-day
   cycle ≈ 4–6.5 h of GPU work per 72 h (depending on source length), so the "doesn't fit" condition for
   trying qwen3:30b-a3b was not met; no model pull was made.
+
+## D-034 Clip boundaries on sentences (Emre's decision #1, 2026-10-23)
+- **Kural (Emre):** start ≤ 3 s back / ≤ 2 s forward to a sentence start (previous word ends . ? ! or
+  ≥ 0.6 s silence); end ≤ 4 s forward / ≤ 3 s back to a sentence end + 0.25 s; length 18–32 s; no
+  boundary or out of range → rejected and logged, next candidate tried; 0.12 s audio fades.
+- **Karar (details left open):** a boundary within ±0.5 s of Qwen's time counts as "already there"
+  (Qwen only gives whole seconds, so 6.4 s should not be pushed back to an earlier sentence); the
+  0.25 s tail never runs into the next word; the start is the word's own start (no pre-roll); the first
+  word of a segment is a sentence start only after ≥ 0.6 s of silence; the last word only ends a sentence
+  with punctuation. Qwen's raw length pre-filter is 18–32 s ± 3 s (alignment can move each end by a
+  few seconds); the exact 18–32 s check is after alignment. Overlaps are resolved AFTER alignment, so a
+  rejected best clip does not take its overlapping alternatives with it. The old 1 s fade-out was
+  replaced by the 0.12 s one (it would swallow the now complete last word).
+- **Gerçek veri (C'nin Jay Shetty klipleri):** 2/3 now end on a full sentence ("…long after the story
+  ends.", "…already within you."), 1/3 rejected (no sentence end within +4/−3 s); render + QC pass.

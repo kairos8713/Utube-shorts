@@ -51,6 +51,7 @@ ASS_MARGIN_LR = 140
 
 LOUDNORM = "loudnorm=I=-14:TP=-1.5:LRA=11"
 AUDIO_RATE = 48000
+AUDIO_EDGE_FADE_S = 0.12      # clips now end right after a sentence: short fades only (no clicks)
 
 _FINAL_NVENC = [
     "-c:v", "h264_nvenc", "-preset", "p5", "-tune", "hq", "-rc", "vbr",
@@ -239,7 +240,8 @@ def build_base_filter(start: float, end: float, clip_dur: float, has_bgm: bool,
     if has_audio:
         parts += [
             f"[0:a]atrim=start={start:.4f}:end={end:.4f},asetpts=PTS-STARTPTS,"
-            f"aresample={AUDIO_RATE},afade=t=out:st={max(clip_dur - 1.0, 0):.3f}:d=1.0[orig_raw]",
+            f"aresample={AUDIO_RATE},afade=t=in:st=0:d={AUDIO_EDGE_FADE_S},"
+            f"afade=t=out:st={max(clip_dur - AUDIO_EDGE_FADE_S, 0):.3f}:d={AUDIO_EDGE_FADE_S}[orig_raw]",
             "[sil][orig_raw]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[orig]",
         ]
     else:

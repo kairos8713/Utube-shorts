@@ -57,3 +57,4 @@ __pycache__/
 # ── Private task notes ───────────────────────────────────────────────────────
 claude_code_instagram_prompt.md
 claude_code_full_test_prompt.md
+claude_code_decisions_prompt.md

@@ -24,7 +24,9 @@ class FakeWhisper:
 
     def transcribe(self, path, words=False):
         EVENTS.append("whisper")
-        words_ = [{"start": 30 + i * 0.5, "end": 30.4 + i * 0.5, "word": f"w{i}"} for i in range(40)]
+        # 6 sentences of 8 words from 30.0 s; full stops end at 33.9, 37.9, … 53.9
+        words_ = [{"start": 30 + i * 0.5, "end": 30.4 + i * 0.5, "word": f"w{i}" + ("." if i % 8 == 7 else "")}
+                  for i in range(48)]
         return {"language": self.language,
                 "segments": [{"start": 30, "end": 52, "text": "a long interesting story", "words": words_}]}
 
@@ -74,6 +76,7 @@ def test_stage_order_is_strict(tmp_path):
     assert kinds.index("llm_unload") < kinds.index("render")
     cand = res.produced[0]
     assert cand.abs_start == 210.0 and cand.caption["caption"].endswith("🎥 @Src")
+    assert (cand.start, cand.end) == (30.0, 54.15)        # Qwen's 30–52 s → end of the sentence at 53.9 + 0.25
     assert cand.words and cand.words[0]["start"] >= 0
 
 
@@ -113,3 +116,19 @@ def test_clip_words_are_relative():
     words = [{"start": 10.0, "end": 10.5, "text": "a"}, {"start": 31.0, "end": 31.4, "text": "b"},
              {"start": 40.0, "end": 40.2, "text": "c"}]
     assert clip_words(words, 30.0, 35.0) == [{"start": 1.0, "end": 1.4, "text": "b"}]
+
+
+def test_unalignable_clip_is_rejected_and_the_next_candidate_used(tmp_path):
+    """Qwen's best clip has no sentence end near its end → rejected (logged); the next one is used."""
+    p = make_pipeline(tmp_path)
+    orig = p.llm.chat_json
+
+    def two_clips(messages, task, **k):
+        if task == "clip_scoring":
+            return {"clips": [{"start": "00:30", "end": "00:59", "score": 9, "topic": "best", "reason": "r"},
+                              {"start": "00:34", "end": "00:54", "score": 8, "topic": "next", "reason": "r"}]}
+        return orig(messages, task, **k)
+    p.llm.chat_json = two_clips
+    res = p.run([SourceVideo(url="u", niche="x", max_clips=1)])
+    assert [c.topic for c in res.produced] == ["next"]
+    assert (res.produced[0].start, res.produced[0].end) == (34.0, 54.15)

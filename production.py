@@ -22,6 +22,7 @@ import ffmpeg_renderer
 import qwen_specialized
 import render_qc
 import rife_interpolator
+from clip_bounds import align_clip
 from config import settings
 from gpu_lock import gpu_job
 from llm_client import get_llm
@@ -201,23 +202,37 @@ class Pipeline:
                             continue
                         for c in qwen_specialized.score_clips(seg["text"], src.niche, seg["duration"],
                                                               perf, llm=self.llm):
-                            cand = ClipCandidate(src, seg, c["start"], c["end"], c["score"], c["topic"],
+                            bounds, why = align_clip(seg.get("words") or [], c["start"], c["end"], seg["duration"])
+                            if bounds is None:
+                                log.info("clip rejected %s @%.0f-%.0f: %s", src.url, seg["offset"] + c["start"],
+                                         seg["offset"] + c["end"], why)
+                                continue
+                            cand = ClipCandidate(src, seg, bounds[0], bounds[1], c["score"], c["topic"],
                                                  c["reason"], c["time_sensitive"])
                             if self.is_duplicate(src.url, cand.abs_start, cand.abs_end):
                                 log.info("skip duplicate segment %s %.0f-%.0f", src.url, cand.abs_start, cand.abs_end)
                                 continue
                             cands.append(cand)
                     cands.sort(key=lambda c: -c.score)
-                    for cand in cands[:src.max_clips]:
+                    picked = []
+                    for cand in cands:                 # best first; a rejected one makes room for the next
+                        if len(picked) >= src.max_clips:
+                            break
+                        if any(o.segment is cand.segment and cand.start < o.end and o.start < cand.end
+                               for o in picked):
+                            log.info("clip rejected %s @%.0f: overlaps a better clip after alignment",
+                                     src.url, cand.abs_start)
+                            continue
                         cand.words = clip_words(seg_words(cand), cand.start, cand.end)
                         cand.transcript = " ".join(w["text"] for w in cand.words)
                         cand.caption = qwen_specialized.write_caption(
                             cand.transcript or cand.segment.get("text", ""), src.niche, src.source_handle,
                             self.previous_captions(src.niche), source_name=src.source_name, llm=self.llm)
                         if cand.caption:
-                            chosen.append(cand)
+                            picked.append(cand)
                         else:
                             log.warning("no acceptable caption for %s @%.0f", src.url, cand.abs_start)
+                    chosen += picked
             finally:
                 self.llm.unload()
         return chosen

@@ -155,7 +155,7 @@ def channel_stats(meta: dict) -> dict:
 # ── Qwen tasks (narrow) ──────────────────────────────────────────────────────
 
 _Q_ROLE = """You find YouTube channels whose long-form videos (podcasts, interviews, talks,
-commentary) can be cut into engaging 20-25 s Instagram Reels for the given niche. Write search
+commentary) can be cut into engaging 20-30 s Instagram Reels for the given niche. Write search
 queries that surface such channels (English-language content)."""
 _Q_SPEC = '{"queries": ["<2-5 search queries, max 80 chars each>"]}'
 

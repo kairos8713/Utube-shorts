@@ -10,9 +10,11 @@ def test_filter_clips_enforces_duration_score_overlap():
         {"start": "02:00", "end": "02:23", "score": 6},   # score too low
         {"start": "02:50", "end": "03:14", "score": 7},   # beyond segment end (180)
         {"start": 100, "end": 125, "score": 7},           # 25 s ok (numeric)
+        {"start": 130, "end": 163, "score": 7},           # 33 s: raw ok, clip_bounds decides (18–32 after alignment)
+        {"start": 40, "end": 80, "score": 7},             # 40 s too long even before alignment
     ]
     out = q.filter_clips(raw, segment_duration=180)
-    assert [(c["start"], c["end"]) for c in out] == [(10.0, 32.0), (100.0, 125.0)]
+    assert [(c["start"], c["end"]) for c in out] == [(10.0, 32.0), (100.0, 125.0), (130.0, 163.0)]
 
 
 def test_validate_caption_rules():
