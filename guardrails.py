@@ -125,12 +125,32 @@ def validate_cap_change(session, account, new_cap, now: _dt.datetime = None) -> 
 
 # ── publishing ───────────────────────────────────────────────────────────────
 
+CAP_WINDOW = _dt.timedelta(hours=24)   # the daily cap is counted over this rolling window
+CAP_COUNTED_STATUSES = ("PUBLISHED", "CONTAINER", "UNKNOWN")
+
+
 def posts_last_24h(session, account_id: int, now: _dt.datetime = None) -> int:
     from models import Post
     now = now or utcnow()
     return (session.query(Post)
-            .filter(Post.owned_channel_id == account_id, Post.status.in_(("PUBLISHED", "CONTAINER", "UNKNOWN")),
-                    Post.created_at >= now - _dt.timedelta(hours=24)).count())
+            .filter(Post.owned_channel_id == account_id, Post.status.in_(CAP_COUNTED_STATUSES),
+                    Post.created_at >= now - CAP_WINDOW).count())
+
+
+def cap_frees_at(session, account, now: _dt.datetime = None) -> Optional[_dt.datetime]:
+    """Earliest time can_publish's daily-cap check passes again for this account (now if it already does,
+    None with a zero cap)."""
+    from models import Post
+    now = now or utcnow()
+    cap = effective_cap(session, account, now)
+    if cap <= 0:
+        return None
+    times = sorted(r[0] for r in session.query(Post.created_at).filter(
+        Post.owned_channel_id == account.id, Post.status.in_(CAP_COUNTED_STATUSES),
+        Post.created_at >= now - CAP_WINDOW).all())
+    if len(times) < cap:
+        return now
+    return times[len(times) - cap] + CAP_WINDOW + _dt.timedelta(minutes=1)
 
 
 def last_global_post_time(session) -> Optional[_dt.datetime]:

@@ -118,6 +118,24 @@ def next_window_start(acc, now):
     return s
 
 
+def cap_defer_time(session, acc, now):
+    """Daily cap hit (the post ran late): retry as soon as the rolling 24 h cap frees up — inside the
+    posting window — instead of a whole day later on top of the next day's planned post."""
+    from timeutil import to_local, window_day_of, window_for
+    t = guardrails.cap_frees_at(session, acc, now)
+    if t is None:
+        return next_window_start(acc, now)
+    t = max(t, now)
+    if window_day_of(t, acc.posting_window) is not None:
+        return t
+    day = to_local(t).date()
+    for d in (day - _dt.timedelta(days=1), day, day + _dt.timedelta(days=1)):
+        s, _ = window_for(d, acc.posting_window)
+        if s >= t:
+            return s
+    return next_window_start(acc, t)
+
+
 def publish_item(session, item: UploadQueue, now=None, client_factory=None, host=hosting,
                  sleep=time.sleep, poll_timeout=None) -> str:
     now = now or utcnow()
@@ -136,7 +154,7 @@ def publish_item(session, item: UploadQueue, now=None, client_factory=None, host
         if "8-minute" in why:
             return "DEFER_GAP"
         if "daily cap" in why:
-            item.scheduled_for = next_window_start(acc, now)
+            item.scheduled_for = cap_defer_time(session, acc, now)
             session.commit()
             return "DEFER_CAP"
         if why.startswith("account status") or "warm-up" in why or "not connected" in why or "expired" in why:

@@ -136,3 +136,35 @@ def test_startup_alerts_items_stuck_in_publishing(db, two_queued, age, alerted):
     db.commit()
     assert bool(alert_stuck_publishing(db, NOW)) is alerted
     assert (db.query(Alert).filter_by(kind="PUBLISH_STUCK", severity="CRITICAL").count() == 1) is alerted
+
+
+# ── daily cap hit: retry when the rolling 24 h cap frees up, not a day later ──
+
+def test_cap_frees_at_counts_like_can_publish(db):
+    import guardrails
+    from helpers import post
+    a = account(db, "capfree")
+    assert guardrails.cap_frees_at(db, a, NOW) == NOW
+    post(db, a, video(db, a, url="cf"), published_at=NOW - dt.timedelta(hours=21))
+    assert guardrails.cap_frees_at(db, a, NOW) == NOW + dt.timedelta(hours=3, minutes=1)
+
+
+def test_defer_cap_waits_until_cap_frees_inside_window(db, two_queued):
+    from helpers import post
+    a, _, (q, _) = two_queued
+    post(db, a, video(db, a, url="earlier"), published_at=NOW - dt.timedelta(hours=21))
+    assert _pub(db, q) == "DEFER_CAP"
+    # 17:01 UTC = 19:01 Warsaw, same evening — previously the start of tomorrow's window (+23 h)
+    assert q.status == "PENDING" and q.scheduled_for == NOW + dt.timedelta(hours=3, minutes=1)
+    assert publish_item(db, q, now=q.scheduled_for, client_factory=lambda acc, **k: FakeIG(), host=FakeHost(),
+                        sleep=lambda s: None) == "PUBLISHED"
+
+
+def test_defer_cap_outside_window_goes_to_next_window_start(db, two_queued):
+    from helpers import post
+    a, _, (q, _) = two_queued
+    now = dt.datetime(2026, 10, 20, 2, 30)                    # 04:30 Warsaw, window closes 05:00
+    post(db, a, video(db, a, url="late"), published_at=dt.datetime(2026, 10, 19, 3, 20))
+    assert publish_item(db, q, now=now, client_factory=lambda acc, **k: FakeIG(), host=FakeHost(),
+                        sleep=lambda s: None) == "DEFER_CAP"
+    assert q.scheduled_for == dt.datetime(2026, 10, 20, 13, 0)   # cap frees 05:21 Warsaw → 15:00 Warsaw
