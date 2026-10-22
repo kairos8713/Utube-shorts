@@ -29,3 +29,17 @@
 ## Notlar
 - 2026-10-22: Registry PATH düzeltilmiş (System32, nodejs, Python311). Ollama 0.40.6; qwen3:32b + qwen3.8:27b kurulu.
 - Ortam çağrıları (bash) eski PATH'i görüyor; araçlar tam yolla çağrılıyor.
+
+## Kararlar sonrası (2026-10-23, claude_code_decisions_prompt.md)
+
+| Madde | Durum | Commit |
+|---|---|---|
+| 1 Klip sınırları cümleye hizalı | BİTTİ | b0b8d72 |
+| 2 Pencere günü + aynı hesap aralığı | BİTTİ | df22371 |
+| 3 Yorum yanıtları (küratör sesi) + F yeniden | BİTTİ | 8b27486 |
+| 4 Tek 403 döngüyü durdurmuyor | BİTTİ | ca165e1 |
+| 5 Kaynak kuralları + sıralama + A yeniden | BİTTİ | 9e1dea9 |
+| 6 Küçük düzeltmeler + stop_services.ps1 | BİTTİ | 0f15a5f |
+| 7 Rapor / MORNING_REPORT | BİTTİ | (docs commit) |
+
+Testler: 299 passed. Push yok.

@@ -61,8 +61,11 @@ Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_mi
 1. **YouTube indirmesi — ÇÖZÜLDÜ (2026-10-22), ayrıntı `docs/YTDLP_FIX.md`:** `.venv` + yt-dlp 2026.10.21 +
    yt-dlp-ejs + deno (`tools\deno`), yt-dlp'nin varsayılan client'ları, çerezsiz: 5 indirme (59 dk podcast dahil),
    ytsearch ve kanal listesi doğrulandı. Eski 403'ün sebebi eski yt-dlp + kodun `android_vr`'ı zorlamasıydı.
-   **Senin yapman gereken:** sistem PATH'ini düzelt (System32 ve nodejs eksik; adımlar `YTDLP_FIX.md` §1).
-   bgutil PO token sunucusu yedek olarak hazır (`Reels-PotProvider` görevi).
+   Sistem PATH'i 2026-10-22'de düzeltildi (System32, nodejs, Python311). bgutil PO token sunucusu yedek
+   olarak hazır (`Reels-PotProvider` görevi).
+   **2026-10-23:** tek bir videodaki 403 artık döngüyü durdurmuyor (60–120 sn bekle, avc1 formatla 1 kez daha
+   dene, olmazsa sadece o video atlanır); `YOUTUBE_BLOCKED` ancak 1 saatte ≥ 3 farklı videoda 403/429 olursa
+   ya da "Sign in to confirm you're not a bot" görülürse çalar. Alarm metni türe göre doğru çözümü söyler.
 2. **Sızmış anahtarlar:** Bu kopyada `youtube_analytics.py` yoktu, ama orijinal public repoda
    hardcoded YouTube API anahtarı varsa **Google Cloud Console → Credentials'tan iptal et**
    (git geçmişi yeniden yazılmadı). `client_secret.json` (Google OAuth) da public repoda olduysa
@@ -96,17 +99,19 @@ Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_mi
 7. **Ollama + model:**
    - Ollama'yı kur (ollama.com), sistem değişkenleri: `OLLAMA_FLASH_ATTENTION=1`,
      `OLLAMA_KV_CACHE_TYPE=q8_0`.
-   - Model: `ollama pull qwen3:32b` (~20 GB). `.env`: `OLLAMA_MODEL=qwen3:32b`, `OLLAMA_NUM_CTX=8192`
-     (varsayılanlar bunlar). GGUF dosyası / Modelfile **gerekmiyor** (`ollama/Modelfile` sadece kendi
-     GGUF'unu kullanmak istersen).
-   - Alternatif: `ollama pull qwen3:30b-a3b` (~19 GB, MoE, çok daha hızlı) — sadece
-     `OLLAMA_MODEL=qwen3:30b-a3b` değiştirmek yeterli, başka kod değişikliği yok.
-   - Test: `ollama run qwen3:32b "merhaba"` ve `ollama ps` → PROCESSOR sütunu `100% GPU` olmalı.
-     cycle_runner açılışta bunu kendisi kontrol eder; CPU'ya taşma varsa `LLM_CPU_OFFLOAD` uyarı alarmı verir.
+   - Model (tam test 1e, D-030): **`qwen3.8:27b`**. `.env`: `OLLAMA_MODEL=qwen3.8:27b`, `OLLAMA_NUM_GPU=99`,
+     `OLLAMA_NUM_CTX=12288` (bu makinede ayarlı). GGUF / Modelfile **gerekmiyor**.
+   - qwen3:32b de çalışır (ctx 6144'te %100 GPU) ama daha yavaş ve testte bir kez bilgi uydurdu.
+   - Test: `ollama ps` → PROCESSOR sütunu `100% GPU` olmalı. cycle_runner açılışta bunu kendisi kontrol eder;
+     CPU'ya taşma varsa `LLM_CPU_OFFLOAD` uyarı alarmı verir. Watchdog Ollama'yı yeniden başlatırsa log +
+     `OLLAMA_RESTARTED` uyarısı yazar.
 8. **Otomatik başlatma:** (önce 1. maddedeki `setup_venv.ps1`) →
    `powershell -ExecutionPolicy Bypass -File scripts\install_autostart.ps1`. Tüm Python servisleri
    `.venv\Scripts\pythonw.exe` ile çalışır; 6 görev: PO token sunucusu (node, varsa), panel, watchdog,
-   publisher, comments, cycle runner. Windows Update → Gelişmiş →
+   publisher, comments, cycle runner. Servisleri durdurmak için:
+   `powershell -ExecutionPolicy Bypass -File scripts\stop_services.ps1` (görevleri durdurur ama silmez, alt
+   süreçleri de kapatır; `-DryRun` sadece listeler). Aynı servis iki kez başlatılırsa ikinci kopya kendini
+   kapatır (tek-örnek kilidi). Windows Update → Gelişmiş →
    **Etkin saatler**'i yayın penceresini (15:00–05:00 Warsaw) kapsayacak şekilde ayarla; prizdeki
    güç planında uykuyu kapat.
 9. **Long-form pipeline (utube-lfv / llama-server):** aynı GPU kilidini kullanmalı:
@@ -119,8 +124,20 @@ Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_mi
 11. **Kaynak:** Eski havuzdaki tek kaynak `@MrBeast` TRIAL olarak taşındı. Çok kesilen, telif
     koruması güçlü bir kanal; sistem test sonucuna göre karar verecek ama baştan çıkarmak isteyebilirsin
     (panel → Kaynaklar → Kara liste).
+    **Kaynak kuralları (2026-10-23):** keşif artık TED/TEDx, haber/TV kanalları, film stüdyoları, müzik
+    şirketleri (düzenlenebilir liste: `.env` → `SOURCE_EXCLUDE_CHANNEL_IDS`, `SOURCE_EXCLUDE_NAME_PATTERNS`),
+    Music kategorisindeki ve tepki/derleme formatındaki kanalları eliyor. Mevcut kaynakları bu kurallara göre
+    gözden geçirmek için (hiçbir şeyi değiştirmez, sadece öneri yazdırır):
+    `.venv\Scripts\python.exe scripts\review_sources.py` (`--online` ile kategori/açıklama da kontrol eder);
+    önerileri panelden uygula.
 12. **Deneme önerisi:** İlk 1–2 hafta 4–5 hesapla başla; günlük 1 paylaşım (14 sağlıklı günden sonra
     sistem 2'ye çıkarabilir). Panelde Karar günlüğü ve Raporlar'ı her gün kontrol et.
+    **Günlük sınır (2026-10-23, D-035):** "gün" = Warsaw yayın-penceresi günü (15:00–05:00, pencerenin
+    başladığı tarih); aynı hesabın iki paylaşımı arası en az 14 saat (cap 2'de 6 saat); genel 8 dk aralık aynı.
+13. **Canlıya geçmeden önce (tam test, `docs/FULL_TEST_REPORT.md` §11–12):** önce gerçek hesaplarla
+    `DRY_RUN=true` bir döngü çalıştır, panelde "Bugünün planı"nı ve reelleri kontrol et (klipler artık cümle
+    sınırında başlayıp bitiyor; yorum yanıtları küratör sesiyle). Sonra `DRY_RUN=false` ve ilk yayını canlı izle.
+    `install_autostart.ps1`'i en son sen çalıştır.
 
 ## 4. Doğrulanamayan / doğrulanması gereken noktalar
 

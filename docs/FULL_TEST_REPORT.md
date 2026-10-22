@@ -98,7 +98,7 @@ Not: A adımı model kararı öncesi qwen3:32b ile koştu (niş uyum puanları o
 | Podcast | Jay Shetty Podcast (0,852) | The Going Deeper (uyum 0,2 — yetişkin içerik, doğru) | The Diary Of A CEO |
 | Personal Finance | The Money Guy Show (0,865) | — | Mel Robbins (uyum 0,4), Ramsey Show Highlights |
 | Tech / AI | Bloomberg Television (0,713) | WIRED (uyum **0,1** — şüpheli) | TED |
-| Psychology | TEDx Talks (0,747) | TED-Ed (uzun video yok, doğru) | Queen (müzik kanalı, uyum **0,85** — yanlış) |
+| Psychology | TEDx Talks (0,747) | TED-Ed (uzun video yok, doğru) | Queen (uyum 0,85 — *düzeltme: müzik kanalı değil, bkz. §12.5*) |
 
 ### Reeller (C) — 6/6 QC PASS
 Hepsi 1080×1920, 60 fps (RIFE), H.264 ~8,4 Mbit/s, AAC 48 kHz, −13,2…−15,2 LUFS, faststart, 20–25 s.
@@ -223,8 +223,8 @@ C'de 3 video, D-031); E-inject tek dummy dosya (yayın sonrası silindi); H port
 4. **Yorum yanıtlarının içeriği:** kliptekiler adına "biz/ben" diye konuşma, uydurma ("link in the
    description"), soruyu savuşturma. Öneri: yanıt istemine "üçüncü şahıs/hesap sesiyle konuş; klipte
    yoksa bilmediğini söyle" kuralı + doğrulayıcıda "we/I + iddia" ve "link" ifadeleri.
-5. **Kaynak keşfi kalitesi** (A, qwen3:32b ile): WIRED Tech/AI'da uyum 0,1; Queen (müzik) Psikolojide
-   0,85; Bloomberg / TEDx gibi büyük yayıncılar TRIAL'a girdi (TEDx CC BY-NC-ND); `clip_permission` her
+5. **Kaynak keşfi kalitesi** (A, qwen3:32b ile): WIRED Tech/AI'da uyum 0,1; "Queen" Psikolojide 0,85
+   (*düzeltme 2026-10-23: müzik kanalı değil, anlatım kanalı; asıl sorun yeniden yükleme — §12.5*); Bloomberg / TEDx gibi büyük yayıncılar TRIAL'a girdi (TEDx CC BY-NC-ND); `clip_permission` her
    kaynakta sabit 0,3; doygunluk sezgiseli tam kanal adını alt dize olarak aradığı için hep 0,0; Qwen
    arama sorguları genel. Yeni modelle tekrar ölçülmeli.
 6. **Tepki (reaction) formatı:** The Money Guy Show başka içerik üreticilerinin TikTok videolarını
@@ -311,7 +311,7 @@ Emre'nin §8 kararları uygulandı; her madde ayrı commit + test. Push yok.
 - Test: 8 günlük simülasyon (20–27 Eki, 25 Eki DST gecesi dahil), 4 hesap × 5 tohum → her pencere gününde tam 1 gönderi,
   en küçük aralık ≥ 14 sa, 32/32 planlandığı anda yayınlandı, **gün kaybı 0**. Guardrail sayfası `describe()`'dan güncel.
 
-### 12.3 Yorum yanıtları — küratör sesi
+### 12.3 Yorum yanıtları — küratör sesi — `8b27486`
 - İstem: hesap klibi paylaşan küratör; klipteki kişiler adına "ben/biz" yok (üçüncü şahıs); bilinmeyene dürüst cevap;
   link / açıklama / bio / DM / "full episode" yönlendirmesi yok; soru konu dışı diye geri çevrilmez. `SOURCE` veri bloğu
   (kanal adı + handle + klip konusu).
@@ -357,4 +357,97 @@ Emre'nin §8 kararları uygulandı; her madde ayrı commit + test. Push yok.
 | 30 | Türkçe | question | Bu kısım gerçekten çok iyi, tam bölümün adı nedir? | Bu klipte bölümün tam adı belirtilmiyor, sadece erken ödenen ipotek ve 'coast fire' stratejisi paylaşılıyor. |
 
 Gözlem: yanıtlar artık doğru ama sık sık "The clip doesn't say…" kalıbına düşüyor (12 yanıtın 7'si); tekrar benzerliği eşiğin altında. Gerekirse istemde çeşitlilik kuralı eklenebilir (rapor).
+
+### 12.4 Tek 403 döngüyü durdurmuyor — `ca165e1`
+- Bir videoda 403/429: 60–120 sn bekle, `bv*[vcodec^=avc1][height<=1080]+ba/b` ile 1 kez daha dene; yine olmazsa
+  sadece o video atlanır. `YOUTUBE_BLOCKED` (indirmeleri durdur + CRITICAL alarm) ancak 1 saatte ≥ 3 farklı videoda;
+  "Sign in to confirm you're not a bot" ve çerez hataları hâlâ anında blok. Sayaç DB'de (servis yeniden başlasa da
+  korunur; döngü, keşif ve hızlı şerit ortak). D-037.
+- Test: 1 video 403 → bekleme + farklı formatla yeniden deneme / sıradaki videoya geçiş; 3 farklı video → blok,
+  4. video hiç denenmez, tek alarm; 1 saatten eski sayımlar düşer.
+
+### 12.5 Kaynak seçimi + klip sıralaması — `9e1dea9`
+- Keşifte, model çağrısından önce kod kuralları: düzenlenebilir dışlama listesi (`config`: TED/TEDx/TED-Ed, haber/TV,
+  stüdyolar, müzik şirketleri — kanal ID'leri + ad kalıpları), Music kategorisi (örnek videonun meta verisi, indirme
+  yok), tepki/derleme oranı ≥ %30 (son 15 video başlık + açıklama). Qwen ayrıca formatı değerlendiriyor
+  (`reaction_compilation`, `reupload`, `news_tv`…), niş uyumunu son 15 video başlığı + açıklamasıyla veriyor.
+- `clip_permission`: yalnızca açıklamadaki açık ifadeden (kod kuralı ya da modelin açıklamada gerçekten geçen alıntısı);
+  yoksa **bilinmiyor** (None) ve skordan çıkarılıp ağırlıklar yeniden ölçekleniyor — sabit 0,3 yok.
+- Doygunluk: normalize ad ("The Money Guy Show" → "money guy") + "clips / podcast clips / shorts" aramaları,
+  farklı kanal sayısı.
+- Klip puanları 1–100, aynı cevapta tekrar yok; ayrıca video başına tüm adayları birlikte sıralayan çağrı; klipler
+  sıraya göre seçiliyor.
+- `scripts/review_sources.py`: gerçek DB'deki kaynakları kurallara göre değerlendirip **önerilen** kara listeyi
+  yazdırır, hiçbir şey değiştirmez (salt-okunur/immutable açılış; gerçek DB hash'i aynı kaldı, -wal/-shm oluşmadı).
+  Gerçek DB'de tek kaynak (@MrBeast) var, öneri yok. Test kopyasında (A'nın 13 kaynağı): Bloomberg TV, TED, TEDx,
+  TED-Ed önerildi. Money Guy çevrimdışı kontrolde yakalanmıyor (kayıtlı başlıklarında "react" geçmiyor); bu tür
+  kanalları keşifte Qwen'in format değerlendirmesi yakalıyor (A2: "Too Late Now").
+- **Düzeltme:** §5'te "Queen"i müzik kanalı diye yazmıştım; yanlış. O kanal psikoloji/felsefe anlatımları
+  yayınlıyor (12 videodan 2'si şarkı); açıklamasında "Narration: Eternalised (Full Rights)" var → başkasının
+  anlatımını yeniden yüklüyor. Psikoloji uyumu 0,85 makuldü; asıl sorun yeniden yükleme. Müzik kuralı yine uygulandı ve
+  gerçek bir müzik kanalı örneğiyle test edildi; Qwen format değerlendirmesine `reupload` eklendi (D-038).
+- Test: müzik grubu kanalı, tepki kanalı ve TEDx Qwen'e gitmeden eleniyor; izin sadece açık metinden; bilinmeyen izin
+  skoru cezalandırmıyor; doygunluk normalize adla; tekrar yok doğrulayıcıları; seçimi sıralama belirliyor.
+
+#### A yeniden (qwen3.8:27b, test kopyası, 4 ses örneği, 13 dk; Qwen 15 çağrı, ort. 6.06 sn, 0 tekrar, think sızıntısı 0)
+
+| Niş | Kaynak | Durum | Skor | Uyum | İzin | Doygunluk | Gerekçe |
+|---|---|---|---|---|---|---|---|
+| Podcast | Think Media | REJECTED | 0.00 | 0.1 | bilinmiyor | — | niche fit 0.1 |
+| Podcast | Jay Shetty Podcast | TRIAL | 0.94 | 1.0 | bilinmiyor | 0.3 | score 0.938 vs threshold 0.55 (clip channels: 3, permission: unknown) |
+| Podcast | Kallaway | REJECTED | 0.00 | 0.2 | bilinmiyor | — | niche fit 0.2 |
+| Personal Finance | Humphrey Yang | TRIAL | 0.92 | 1.0 | bilinmiyor | 0.4 | score 0.921 vs threshold 0.55 (clip channels: 4, permission: unknown) |
+| Personal Finance | Too Late Now | REJECTED | 0.00 | 0.95 | bilinmiyor | — | unsuitable format: reaction_compilation (Qwen) |
+| Personal Finance | Nischa | CANDIDATE | 0.00 | 0.95 | bilinmiyor | — | ses örneği bütçe dışı (4) |
+| Tech / AI | Sajjaad Khader | TRIAL | 0.95 | 0.95 | bilinmiyor | 0.1 | score 0.952 vs threshold 0.55 (clip channels: 1, permission: unknown) |
+| Tech / AI | Beyond Coding | CANDIDATE | 0.00 | 0.95 | bilinmiyor | — | ses örneği bütçe dışı (4) |
+| Tech / AI | Lex Fridman | CANDIDATE | 0.00 | 0.7 | bilinmiyor | — | ses örneği bütçe dışı (4) |
+| Psychology | Andrew Huberman | TRIAL | 0.78 | 0.8 | bilinmiyor | 0.7 | score 0.78 vs threshold 0.55 (clip channels: 7, permission: unknown) |
+| Psychology | TED | REJECTED | 0.00 | 0.0 | bilinmiyor | — | excluded publisher (channel id UCAuUUnT6oDeKwE6v1NGQxug) |
+| Psychology | The Diary Of A CEO | CANDIDATE | 0.00 | 0.5 | bilinmiyor | — | ses örneği bütçe dışı (4) |
+
+Gözlem: TED kanal ID'siyle, "Too Late Now" Qwen'in `reaction_compilation` kararıyla elendi; doygunluk artık
+ölçülüyor (Jay Shetty 3, Humphrey Yang 4, Huberman 7 klip kanalı — eskiden hep 0); hiçbir kanal açıklamasında klip
+izni/yasağı yazmıyor → izin her yerde "bilinmiyor". Andrew Huberman gibi çok kesilen büyük bir kanal TRIAL'a girdi
+(doygunluk 0,7 skoru düşürdü ama eşiğin üstünde). (Bu çalıştırmada TED için kategori isteği de yapıldı; sonradan
+liste kontrolü kategori isteğinin önüne alındı, 9e1dea9'da dahil.)
+
+#### Klip sıralaması — gerçek transkript (Jay Shetty, ilk 9 dk, 4 Qwen çağrısı)
+
+Parça başına puanlar: [92, 88, 85, 78, 95, 88, 78, 65, 95, 92, 88] (aynı cevap içinde tekrar yok; farklı parçalar arasında %45 tekrar — bu yüzden video çapında sıralama gerekli).
+
+| Sıra | Puan | Parça puanı | Başlangıç (sn) | Konu |
+|---|---|---|---|---|
+| 1 | 98 | 92 | 19.5 | Missing the potential partner |
+| 2 | 92 | 95 | 181.8 | Breakup addiction truth |
+| 3 | 88 | 92 | 370.0 | Myth: Time Heals Everything |
+| 4 | 85 | 85 | 72.2 | Breakup as chemical withdrawal |
+| 5 | 78 | 78 | 202.0 | Self-sufficiency in love |
+| 6 | 72 | 88 | 158.2 | Rewriting the breakup story |
+| 7 | 68 | 65 | 325.2 | Memory bias myths |
+| 8 | 62 | 78 | 92.5 | Loss of shared identity |
+| 9 | 55 | 88 | 445.5 | Social Media Hooks |
+| 10 | 48 | 88 | 284.6 | Orange juice metaphor |
+
+Sıralamada tekrar eden puan oranı: **0%**; puanlar 98 → 48 arası yayıldı.
+Sıralama parça puanlarını düzeltiyor (ör. parça puanı 88 olan "Orange juice metaphor" video içinde 10. oldu).
+
+### 12.6 Küçük düzeltmeler — `0f15a5f`
+- `pause_reason` artık "AUTH: …" (çift önek yok); `COPYRIGHT_MATCH` e-posta gönderiyor; watchdog Ollama'yı
+  yeniden başlatınca log + `OLLAMA_RESTARTED` uyarısı; kredi satırı `🎥 @JayShettyPodcast. on YouTube`.
+- `scripts/stop_services.ps1`: çalışan Reels-* görevlerini durdurur (silmez), servis süreçlerini alt süreç ağacıyla
+  kapatır (önce watchdog), Ollama'ya dokunmaz; `-DryRun` sadece listeler. Sahte 3 süreçlik ağaçla canlı denendi:
+  hepsi kapandı, çıkış 0, diğer süreçler (o sırada çalışan A2, Ollama) etkilenmedi. D-039.
+
+### 12.7 Toplam
+- Commit'ler (push yok): `b0b8d72` (1), `df22371` (2), `8b27486` (3), `ca165e1` (4), `9e1dea9` (5), `0f15a5f` (6);
+  her commit öncesi gizli desen taraması boş.
+- Testler: 262 → **299 passed**.
+- Yeniden çalıştırılanlar: F (gerçek model, §12.3), A (gerçek model, §12.5), C'nin gerçek klipleriyle hizalama
+  (§12.1), gerçek transkriptte sıralama (§12.5).
+- Gerçek DB: hash `41d77393…` değişmedi; Instagram/R2/SMTP'ye istek yok; Görev Zamanlayıcı'ya görev eklenmedi.
+- Açık kalan (rapor): yanıtlar sık sık "The clip doesn't say…" kalıbına düşüyor; yorumdaki "full episode"
+  kelimesini tekrarlayan dürüst yanıt da kural gereği reddediliyor (o soruya yanıt verilmiyor); adında "News" geçen
+  her kanal dışlanıyor (bilinçli geniş kural); büyük ve çok kesilen kanallar (Huberman) yalnızca doygunlukla
+  cezalanıyor.
 
