@@ -119,7 +119,8 @@ def check_ollama(session, now=None, health=None, starter=None) -> str:
     if health():
         return "ok"
     wait_s = 0 if starter else 15          # injected starters (tests) don't need the boot wait
-    starter = starter or (lambda: subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL,
+    from llm_client import ollama_exe
+    starter = starter or (lambda: subprocess.Popen([ollama_exe(), "serve"], stdout=subprocess.DEVNULL,
                                                    stderr=subprocess.DEVNULL))
     try:
         starter()

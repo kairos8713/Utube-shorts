@@ -409,18 +409,92 @@ def test_powershell_scripts_parse(script):
 
 
 def test_downloader_uses_po_token_clients_and_provider(monkeypatch, tmp_path):
+    """Settings are forwarded to yt-dlp (fallback combination: mweb + bgutil server)."""
     import downloader
     seen = {}
 
     class R:
         returncode, stderr = 1, "ERROR: stop here"
     monkeypatch.setenv("POT_PROVIDER_URL", "http://127.0.0.1:4417")
+    monkeypatch.setenv("YTDLP_PLAYER_CLIENT", "mweb")
     monkeypatch.setattr(downloader.subprocess, "run", lambda cmd, **kw: seen.setdefault("cmd", cmd) and R())
     with pytest.raises(downloader.DownloadError):
         downloader.download_youtube_video("https://www.youtube.com/watch?v=abcdefgh", out_dir=str(tmp_path))
     cmd = " ".join(seen["cmd"])
-    assert "youtube:player_client=mweb,tv,web_safari" in cmd
+    assert "youtube:player_client=mweb" in cmd
     assert "youtubepot-bgutilhttp:base_url=http://127.0.0.1:4417" in cmd
+
+
+def _captured_base(monkeypatch):
+    import downloader
+    seen = {}
+
+    class R:
+        returncode, stdout, stderr = 0, '{"entries": []}', ""
+    monkeypatch.setattr(downloader.subprocess, "run", lambda cmd, **kw: seen.setdefault("cmd", cmd) and R())
+    downloader.ytdlp_json("ytsearch3:podcast", ["--flat-playlist"])
+    return seen["cmd"]
+
+
+def test_verified_default_combination(monkeypatch, tmp_path):
+    """Default = the combination verified on 2026-10-22: venv yt-dlp, deno by full path, yt-dlp's own
+    default player clients, no cookies, no forced remote components."""
+    import sys
+
+    import downloader
+    cookie = tmp_path / "cookies.txt"
+    cookie.write_text("# Netscape HTTP Cookie File\n")
+    monkeypatch.setenv("COOKIES_PATH", str(cookie))
+    venv_py = os.path.join(ROOT, ".venv", "Scripts", "python.exe")
+    cmd = _captured_base(monkeypatch)
+    joined = " ".join(cmd)
+    assert cmd[0] == (venv_py if os.path.exists(venv_py) else sys.executable)
+    assert "player_client" not in joined and "--cookies" not in joined and "--remote-components" not in joined
+    rt = cmd[cmd.index("--js-runtimes") + 1]
+    assert rt.startswith("deno")
+    deno = os.path.join(ROOT, "tools", "deno", "deno.exe")
+    if os.path.exists(deno):
+        assert rt == f"deno:{deno}"                  # full path: PATH on this PC is incomplete
+    assert downloader.js_runtime_arg() == rt
+
+
+def test_cookies_and_node_runtime_are_opt_in(monkeypatch, tmp_path):
+    cookie = tmp_path / "cookies.txt"
+    cookie.write_text("# Netscape HTTP Cookie File\n")
+    custom_py = str(tmp_path / "python.exe")
+    monkeypatch.setenv("COOKIES_PATH", str(cookie))
+    monkeypatch.setenv("YTDLP_USE_COOKIES", "true")
+    monkeypatch.setenv("YTDLP_JS_RUNTIME", "node")
+    monkeypatch.setenv("YTDLP_PYTHON", custom_py)
+    cmd = _captured_base(monkeypatch)
+    assert cmd[0] == custom_py and str(cookie) in cmd
+    assert cmd[cmd.index("--js-runtimes") + 1].startswith("node")
+
+
+def test_update_targets_venv_and_channel(monkeypatch):
+    import downloader
+    seen = []
+
+    class R:
+        returncode, stderr = 0, ""
+    monkeypatch.setattr(downloader, "_updated_this_process", False)
+    monkeypatch.setenv("YTDLP_UPDATE_CHANNEL", "nightly")
+    monkeypatch.setattr(downloader.subprocess, "run", lambda cmd, **kw: seen.append(cmd) or R())
+    downloader.update_ytdlp_once()
+    downloader.update_ytdlp_once()                    # once per process
+    assert len(seen) == 1
+    assert seen[0][0] == downloader.ytdlp_python() and "--pre" in seen[0]
+    assert "yt-dlp[default]" in seen[0] and "bgutil-ytdlp-pot-provider" in seen[0]
+
+
+def test_ollama_cli_full_path(monkeypatch, tmp_path):
+    from llm_client import ollama_exe
+    custom = str(tmp_path / "ollama.exe")
+    monkeypatch.setenv("OLLAMA_EXE", custom)
+    assert ollama_exe() == custom
+    monkeypatch.setenv("OLLAMA_EXE", "")
+    exe = ollama_exe()
+    assert exe == "ollama" or os.path.isabs(exe)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

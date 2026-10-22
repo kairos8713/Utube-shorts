@@ -90,7 +90,7 @@ def run_one_cycle(session, now=None, pipeline_factory=None, llm=None) -> dict:
     # 0. YouTube health
     downloader.update_ytdlp_once()
     age = downloader.cookies_age_days()
-    if age > settings.COOKIES_MAX_AGE_DAYS:
+    if settings.YTDLP_USE_COOKIES and age > settings.COOKIES_MAX_AGE_DAYS:
         raise_alert("COOKIES_STALE", f"cookies.txt is {age:.0f} days old — refresh it to avoid bot blocks",
                     severity="WARNING", session=session)
 

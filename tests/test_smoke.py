@@ -29,7 +29,8 @@ def test_active_code_never_imports_legacy():
     offenders = []
     for dirpath, dirs, files in os.walk(ROOT):
         dirs[:] = [d for d in dirs if d not in ("legacy_youtube", "legacy_misc", "Practical-RIFE", "tests",
-                                                "backups", "logs", ".git", "__pycache__")]
+                                                "backups", "logs", ".git", "__pycache__", ".venv",
+                                                "tools")]
         for f in files:
             if not f.endswith(".py"):
                 continue

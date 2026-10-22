@@ -58,21 +58,11 @@ Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_mi
 
 ## 3. Emre'nin yapması gerekenler (sırayla)
 
-1. **YouTube indirmesi bozuk (acil) → ayrı Python ortamı + PO token sağlayıcı:** yt-dlp 2026.08.19 ile
-   her indirme `HTTP Error 403` veriyor (YouTube "GVS PO Token" istiyor). yt-dlp wiki PO-Token-Guide'ın
-   önerisi: PO token sağlayıcı eklentisi + `mweb` istemcisi (kod artık `YTDLP_PLAYER_CLIENTS=mweb,tv,web_safari`
-   kullanıyor). Adımlar (script'ler yazıldı, **çalıştırılmadı**):
-   1. `powershell -ExecutionPolicy Bypass -File scripts\setup_venv.ps1` → proje kökünde `.venv`
-      (torch/torchvision cu118, `requirements.txt`, en güncel `yt-dlp[default]` + `yt-dlp-ejs` +
-      `bgutil-ytdlp-pot-provider`), ayrıca `toolsgutil-ytdlp-pot-provider\server` altında sağlayıcı
-      sunucusu (Node ≥ 22 gerekli — bu PC'de v24 var; `git clone --branch 2.0.2` → `npm ci` → `npx tsc`).
-      Önce https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases'ten son sürümü kontrol et,
-      gerekirse `-PotProviderVersion` ver.
-   2. Sunucuyu bir kez elle başlat: `node toolsgutil-ytdlp-pot-provider\serveruild\main.js`
-      (127.0.0.1:4416). Doğrula: `.venv\Scripts\python.exe -m yt_dlp -v --skip-download <youtube-url>` →
-      çıktıda `[pot] PO Token Providers: bgutil:http-…` ve `Generating a gvs PO Token` görünmeli.
-   3. Taze `cookies.txt`. Hâlâ 403 ise alternatif eklenti: `yt-dlp-getpot-wpc` (wiki'de yedek olarak geçiyor).
-   Sistem bu hatayı "YouTube engeli" sayıp indirmeleri durdurur ve alarm verir.
+1. **YouTube indirmesi — ÇÖZÜLDÜ (2026-10-22), ayrıntı `docs/YTDLP_FIX.md`:** `.venv` + yt-dlp 2026.10.21 +
+   yt-dlp-ejs + deno (`tools\deno`), yt-dlp'nin varsayılan client'ları, çerezsiz: 5 indirme (59 dk podcast dahil),
+   ytsearch ve kanal listesi doğrulandı. Eski 403'ün sebebi eski yt-dlp + kodun `android_vr`'ı zorlamasıydı.
+   **Senin yapman gereken:** sistem PATH'ini düzelt (System32 ve nodejs eksik; adımlar `YTDLP_FIX.md` §1).
+   bgutil PO token sunucusu yedek olarak hazır (`Reels-PotProvider` görevi).
 2. **Sızmış anahtarlar:** Bu kopyada `youtube_analytics.py` yoktu, ama orijinal public repoda
    hardcoded YouTube API anahtarı varsa **Google Cloud Console → Credentials'tan iptal et**
    (git geçmişi yeniden yazılmadı). `client_secret.json` (Google OAuth) da public repoda olduysa
@@ -265,7 +255,7 @@ Testler: **240 geçti** (yeni `tests/test_fixes.py`: 37 test).
    `.venv\Scripts\pythonw.exe` kullanıyor ve PO token sunucusunu (`Reels-PotProvider`) da kaydediyor.
    İkisi de **çalıştırılmadı** (sadece PowerShell parser ile sözdizimi kontrol edildi). `requirements.txt`'e
    eksik olan `torchvision` (RIFE `model/loss.py` istiyor) ve `bgutil-ytdlp-pot-provider` eklendi;
-   yt-dlp sabit sürümden `>=`'e çevrildi. İndirici `YTDLP_PLAYER_CLIENTS` (varsayılan `mweb,tv,web_safari`)
+   yt-dlp sabit sürümden `>=`'e çevrildi. İndirici `YTDLP_PLAYER_CLIENTS` (o gün varsayılan `mweb,tv,web_safari`; 2026-10-22'de `YTDLP_PLAYER_CLIENT` = yt-dlp varsayılanı olarak değişti, bkz. YTDLP_FIX.md)
    ve isteğe bağlı `POT_PROVIDER_URL` kullanıyor.
 9. **Ollama modeli:** `OLLAMA_MODEL` varsayılan `qwen3:32b`, `OLLAMA_NUM_CTX` varsayılan 8192, GGUF/Modelfile
    opsiyonel. Model sağlık kontrolü artık tam etiketle eşleşiyor (önceden herhangi bir `qwen3:*` yeterliydi).

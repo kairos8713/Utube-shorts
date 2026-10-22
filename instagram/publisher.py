@@ -121,6 +121,12 @@ def next_window_start(acc, now):
 def publish_item(session, item: UploadQueue, now=None, client_factory=None, host=hosting,
                  sleep=time.sleep, poll_timeout=None) -> str:
     now = now or utcnow()
+    wall0 = utcnow()
+
+    def clock():
+        """`now` advanced by the real time spent so far (uploads/polling take minutes)."""
+        return now + (utcnow() - wall0)
+
     acc = session.get(OwnedChannels, item.owned_channel_id)
     video = session.get(videos, item.video_id)
     if system_state.emergency_stopped(session):
@@ -175,7 +181,7 @@ def publish_item(session, item: UploadQueue, now=None, client_factory=None, host
                                              thumb_offset_ms=video.cover_offset_ms)
         post.ig_container_id = c["id"]
         post.status = "CONTAINER"
-        post.container_created_at = max(now, utcnow())
+        post.container_created_at = clock()
         session.commit()
         code = _poll(client, c["id"], settings.IG_POLL_TIMEOUT_S if poll_timeout is None else poll_timeout,
                      sleep)
@@ -186,7 +192,7 @@ def publish_item(session, item: UploadQueue, now=None, client_factory=None, host
             media_id = m["id"]
         else:
             media_id = _publish_once(client, c["id"], video.caption)
-        _mark_published(session, acc, item, video, post, media_id, client, now)
+        _mark_published(session, acc, item, video, post, media_id, client, clock())
         return "PUBLISHED"
     except PublishUncertain as e:
         return _mark_uncertain(session, acc, item, video, post, e)
@@ -228,7 +234,7 @@ def _mark_uncertain(session, acc, item, video, post, e) -> str:
 def _mark_published(session, acc, item, video, post, media_id, client, now):
     post.status = "PUBLISHED"
     post.ig_media_id = media_id
-    post.published_at = max(now, utcnow())
+    post.published_at = now
     post.error_kind = post.error_message = None
     try:
         post.permalink = client.media(media_id).get("permalink")

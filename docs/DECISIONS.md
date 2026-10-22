@@ -184,3 +184,34 @@ PUBLISH_LIMIT; 368 / subcode 2207051 / "spam"/"blocked"/"restricted" → ACTION_
 ## D-010 requirements
 - **Karar:** No `requirements.txt` existed; created a curated UTF-8 one (pinned to installed
   versions). The old UTF-16 freeze `requirements_working_20260522.txt` was converted to UTF-8.
+
+## D-025 YouTube access method (2026-10-22, verified on this PC)
+- **Karar:** Downloads, ytsearch, channel listings and latest-upload checks all run through the project
+  `.venv` (yt-dlp 2026.10.21 + yt-dlp-ejs 0.8.0) with **deno** as JS runtime (portable,
+  `tools\deno\deno.exe`, passed by full path) and yt-dlp's **default player clients**, **without cookies**
+  and without forcing a PO token. Verified: 3/3 probe downloads + production-path verification
+  (docs/YTDLP_FIX.md).
+- **Gerekçe:** First fully working combination in the requested order (a → b → c → d); stopped there.
+  The old 403 came from yt-dlp 2026.08.19 + our code forcing `player_client=android_vr,web,tv`
+  (upstream removed android_vr from defaults in 2026.08.19; 2026.10.21 made `tv_samsung` a default).
+  EJS wiki recommends deno (node >= 22 also supported → `YTDLP_JS_RUNTIME=node`).
+- **Alternatif (yedek, doğrulanmadı):** `YTDLP_PLAYER_CLIENT=mweb` + bgutil PO-token server
+  (PO-Token-Guide recommendation); the server stays as the `Reels-PotProvider` autostart task.
+
+## D-026 Cookies off by default
+- **Karar:** `YTDLP_USE_COOKIES=false`. cookies.txt is no longer sent; the cookie-age alarm only runs
+  when cookies are enabled.
+- **Gerekçe:** Not needed for public videos (verified) and the yt-dlp wiki warns that account cookies
+  risk the account being banned; the existing file is ~2 months old (exported ~12 Aug).
+
+## D-027 yt-dlp always from the venv; full paths for tools
+- **Karar:** `downloader.ytdlp_python()` = `YTDLP_PYTHON` → `.venv\Scripts\python.exe` → current python;
+  the per-cycle update runs `pip install -U "yt-dlp[default]" bgutil-ytdlp-pot-provider` in that venv
+  (`YTDLP_UPDATE_CHANNEL=nightly` adds `--pre`). deno/node/ollama are called by full path
+  (`OLLAMA_EXE`, `YTDLP_JS_RUNTIME_PATH`) because this PC's PATH lacks System32 and nodejs.
+- **Not changed:** the system PATH (Windows setting — fix steps in docs/YTDLP_FIX.md).
+
+## D-028 Publisher timestamps follow the injected clock
+- **Karar:** `publish_item` stamps container/publish times as `now + elapsed wall time` instead of
+  `max(now, utcnow())`. Found because a test started failing once the real date passed the test's
+  fixed `NOW`; the old form mixed two clocks.

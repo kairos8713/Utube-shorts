@@ -85,8 +85,17 @@ _SPEC = {
     # ── render ──────────────────────────────────────────────────────────────
     "BG_MUSIC_ENABLED":      (_bool, "false"),        # bg_music tracks may not be licensed for Instagram
     # ── YouTube / yt-dlp ────────────────────────────────────────────────────
-    "YTDLP_PLAYER_CLIENTS":  (str, "mweb,tv,web_safari"),   # PO-Token-Guide: provider + mweb
+    # Verified working on this PC 2026-10-22 (docs/YTDLP_FIX.md): yt-dlp 2026.10.21 in .venv +
+    # yt-dlp-ejs + deno, yt-dlp's DEFAULT player clients, no cookies, no PO token needed.
+    "YTDLP_PYTHON":          (str, ""),               # empty → .venv\Scripts\python.exe (else current python)
+    "YTDLP_PLAYER_CLIENT":   (str, ""),               # empty = yt-dlp defaults; fallback idea: "mweb" + PO server
+    "YTDLP_JS_RUNTIME":      (str, "deno"),           # deno (EJS wiki recommendation) | node | "" (auto)
+    "YTDLP_JS_RUNTIME_PATH": (str, ""),               # empty → tools\deno\deno.exe / NODE_PATH
+    "YTDLP_REMOTE_COMPONENTS": (str, ""),             # empty = solver from the yt-dlp-ejs pip package
+    "YTDLP_USE_COOKIES":     (_bool, "false"),        # account cookies only if needed (ban risk)
+    "YTDLP_UPDATE_CHANNEL":  (str, "stable"),         # stable | nightly (pip --pre)
     "POT_PROVIDER_URL":      (str, ""),               # bgutil HTTP server; empty = default 127.0.0.1:4416
+    "OLLAMA_EXE":            (str, ""),               # empty → %LOCALAPPDATA%\Programs\Ollama\ollama.exe
     # ── scheduling ──────────────────────────────────────────────────────────
     "POSTING_WINDOW_START":  (str, "15:00"),          # Europe/Warsaw local time
     "POSTING_WINDOW_END":    (str, "05:00"),

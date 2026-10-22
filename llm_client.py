@@ -133,7 +133,7 @@ class OllamaClient:
             pass
         try:
             import subprocess
-            out = subprocess.run(["ollama", "ps"], capture_output=True, text=True, timeout=20).stdout
+            out = subprocess.run([ollama_exe(), "ps"], capture_output=True, text=True, timeout=20).stdout
         except (OSError, subprocess.TimeoutExpired):
             return None
         return parse_ollama_ps(out, self.model)
@@ -194,6 +194,14 @@ class OllamaClient:
                  + ". Reply again with ONE corrected JSON object only."},
             ]
         raise LLMBadOutput(f"{task}: no valid JSON after {retries + 1} attempts: {errors}")
+
+
+def ollama_exe() -> str:
+    """Full path to the Ollama CLI (PATH on this PC is incomplete)."""
+    if settings.OLLAMA_EXE:
+        return settings.OLLAMA_EXE
+    cand = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs", "Ollama", "ollama.exe")
+    return cand if os.path.exists(cand) else "ollama"
 
 
 def _full_name(name: str) -> str:

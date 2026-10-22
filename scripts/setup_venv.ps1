@@ -46,8 +46,22 @@ Run $Py @("-m", "pip", "install", "torch==2.3.1", "torchvision==0.18.1",
           "--index-url", "https://download.pytorch.org/whl/cu118")
 Run $Py @("-m", "pip", "install", "-r", (Join-Path $Root "requirements.txt"))
 
-Step "3/5 newest yt-dlp + EJS + PO token provider plugin"
+Step "3/5 newest yt-dlp + EJS + PO token provider plugin + deno"
 Run $Py @("-m", "pip", "install", "-U", "yt-dlp[default]", "yt-dlp-ejs", "bgutil-ytdlp-pot-provider")
+# EJS wiki: deno is the recommended JS runtime for YouTube challenges (>= 2.3.0). Portable binary in
+# tools\deno (no system install, no PATH change); downloader.py passes it with its full path.
+$deno = Join-Path $Root "tools\deno\deno.exe"
+if (-not (Test-Path $deno)) {
+    $dl = Join-Path $env:TEMP ("deno_" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force $dl | Out-Null
+    $zip = Join-Path $dl "deno.zip"
+    Invoke-WebRequest -UseBasicParsing -OutFile $zip `
+        "https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
+    New-Item -ItemType Directory -Force (Split-Path $deno) | Out-Null
+    Expand-Archive -Force $zip (Split-Path $deno)
+    Remove-Item -Recurse -Force $dl
+}
+& $deno --version
 
 if (-not $SkipPotProvider) {
     Step "4/5 bgutil PO token server $PotProviderVersion (Node >= 22)"
@@ -60,6 +74,9 @@ if (-not $SkipPotProvider) {
     if (-not $git) { throw "git not found (needed to clone the provider)" }
     $npm = Join-Path (Split-Path $node) "npm.cmd"
     $npx = Join-Path (Split-Path $node) "npx.cmd"
+    # npm install scripts (e.g. canvas: "prebuild-install || node-gyp rebuild") call plain `node` and
+    # cmd.exe. This PC's PATH lacks both, so add them for THIS process only (system PATH untouched).
+    $env:Path = (Split-Path $node) + ";" + (Join-Path $env:SystemRoot "System32") + ";" + $env:Path
 
     $tools = Join-Path $Root "tools"
     $repo = Join-Path $tools "bgutil-ytdlp-pot-provider"
