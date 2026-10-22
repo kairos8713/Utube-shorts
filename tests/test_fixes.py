@@ -503,7 +503,7 @@ def test_ollama_cli_full_path(monkeypatch, tmp_path):
 
 def test_ollama_defaults():
     from config import settings
-    assert settings.OLLAMA_MODEL == "qwen3:32b" and settings.OLLAMA_NUM_CTX == 8192
+    assert settings.OLLAMA_MODEL == "qwen3:32b" and settings.OLLAMA_NUM_CTX == 6144
 
 
 def test_parse_ollama_ps():

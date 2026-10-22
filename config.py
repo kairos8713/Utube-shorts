@@ -54,7 +54,8 @@ _SPEC = {
     "OLLAMA_URL":            (str, "http://127.0.0.1:11434"),
     "OLLAMA_MODEL":          (str, "qwen3:32b"),      # `ollama pull qwen3:32b`; alt: qwen3:30b-a3b
     "OLLAMA_TIMEOUT_S":      (int, "600"),
-    "OLLAMA_NUM_CTX":        (int, "8192"),           # fits 2x RTX 3060 (12 GB) with qwen3:32b
+    "OLLAMA_NUM_CTX":        (int, "6144"),           # 2x RTX 3060: qwen3:32b spills to CPU at 8192 (measured)
+    "OLLAMA_NUM_GPU":        (str, ""),               # empty = Ollama decides; e.g. 99 forces all layers on GPU
     "OLLAMA_KEEP_ALIVE":     (str, "15m"),           # within a batch; unload() → keep_alive 0
     "LLM_BACKEND":           (str, "ollama"),        # ollama | mock (tests / E2E without Ollama)
     "WHISPER_MODEL":         (str, "small"),

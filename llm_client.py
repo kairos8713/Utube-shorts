@@ -114,8 +114,11 @@ class OllamaClient:
         return _full_name(self.model) in names
 
     def load(self, keep_alive: str = "5m"):
-        """Load the model into memory without generating (Ollama: /api/generate with no prompt)."""
-        self._call("/api/generate", {"model": self.model, "keep_alive": keep_alive}, attempts=1)
+        """Load the model into memory without generating (Ollama: /api/generate with no prompt).
+        Sends the same options as chat() so the loaded instance (context, GPU layers) is the one
+        production uses — otherwise Ollama would reload it on the first real call."""
+        self._call("/api/generate", {"model": self.model, "keep_alive": keep_alive, "options": model_options()},
+                   attempts=1)
 
     def gpu_residency(self) -> Optional[float]:
         """Share of the loaded model that sits in VRAM (1.0 = fully on GPU), None if not loaded.
@@ -157,8 +160,7 @@ class OllamaClient:
             "messages": msgs,
             "stream": False,
             "keep_alive": keep_alive or settings.OLLAMA_KEEP_ALIVE,
-            "options": {"num_ctx": settings.OLLAMA_NUM_CTX, "temperature": temperature,
-                        "num_predict": max_tokens},
+            "options": {**model_options(), "temperature": temperature, "num_predict": max_tokens},
         }
         if json_mode:
             payload["format"] = "json"
@@ -194,6 +196,14 @@ class OllamaClient:
                  + ". Reply again with ONE corrected JSON object only."},
             ]
         raise LLMBadOutput(f"{task}: no valid JSON after {retries + 1} attempts: {errors}")
+
+
+def model_options() -> dict:
+    """Load-relevant Ollama options; identical on every request so the model is never reloaded."""
+    opts = {"num_ctx": settings.OLLAMA_NUM_CTX}
+    if str(settings.OLLAMA_NUM_GPU).strip():
+        opts["num_gpu"] = int(settings.OLLAMA_NUM_GPU)
+    return opts
 
 
 def ollama_exe() -> str:

@@ -35,7 +35,8 @@ def test_json_call_payload_has_think_false_and_format():
     assert out == {"ok": 1}
     payload = t.calls[0][2]
     assert payload["think"] is False and payload["format"] == "json"
-    assert payload["options"]["num_ctx"] == 8192
+    assert payload["options"]["num_ctx"] == 6144
+    assert "num_gpu" not in payload["options"]          # empty OLLAMA_NUM_GPU = Ollama decides
     assert payload["messages"][-1]["content"].endswith("/no_think")
 
 
@@ -91,3 +92,13 @@ def test_data_block_cannot_be_closed_from_inside():
     block = data_block("TRANSCRIPT", evil)
     assert block.count(">>>END TRANSCRIPT") == 1 and block.endswith(">>>END TRANSCRIPT")
     assert "<<<DATA X" not in block
+
+
+def test_num_gpu_option_on_chat_and_load(monkeypatch):
+    monkeypatch.setenv("OLLAMA_NUM_GPU", "99")
+    c, t = make([chat_reply('{"ok": 1}'), (200, {})])
+    c.chat_json([{"role": "user", "content": "x"}], task="t")
+    c.load()
+    chat_opts, load_payload = t.calls[0][2]["options"], t.calls[1][2]
+    assert chat_opts["num_gpu"] == 99 and chat_opts["num_ctx"] == 6144
+    assert load_payload["options"] == {"num_ctx": 6144, "num_gpu": 99}     # same instance as production
