@@ -146,11 +146,18 @@ def m004_sources_from_legacy_channels(conn):
             (url, handle_from_url(url), sector_id, now, now, cid))
 
 
+def m005_video_source_meta(conn):
+    """Source video title + publish date per clip (comment replies can name the episode)."""
+    add_column(conn, "videos", "source_title", "VARCHAR")
+    add_column(conn, "videos", "source_published_at", "DATETIME")
+
+
 MIGRATIONS = [
     ("001_encrypt_owned_passwords", m001_encrypt_owned_passwords),
     ("002_instagram_schema", m002_instagram_schema),
     ("003_sector_music_slug", m003_sector_niche_slug),
     ("004_sources_from_legacy_channels", m004_sources_from_legacy_channels),
+    ("005_video_source_meta", m005_video_source_meta),
 ]
 
 

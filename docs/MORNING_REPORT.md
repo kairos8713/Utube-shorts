@@ -1,7 +1,7 @@
 # Sabah Raporu — utube-shorts → Otonom Instagram Reels (gece çalışması 2026-10-19)
 
-Branch: `instagram-migration` (yerel, **push yapılmadı**). Bu PC'de git kurulu değil; commit'ler
-`python scripts/dev_git.py` (dulwich) ile atıldı. Her şey `DRY_RUN=true` ile çalışıyor: Instagram'a,
+Branch: `instagram-migration` (yerel, **push yapılmadı**). Git artık bu PC'de kurulu; gece çalışmasındaki
+ilk commit'ler git yokken `python scripts/dev_git.py` (dulwich) ile atılmıştı, sonrakiler normal git ile. Her şey `DRY_RUN=true` ile çalışıyor: Instagram'a,
 e-postaya, R2'ye hiçbir istek gitmedi.
 
 ## 1. Fazlar
@@ -114,9 +114,9 @@ Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_mi
    kapatır (tek-örnek kilidi). Windows Update → Gelişmiş →
    **Etkin saatler**'i yayın penceresini (15:00–05:00 Warsaw) kapsayacak şekilde ayarla; prizdeki
    güç planında uykuyu kapat.
-9. **Long-form pipeline (utube-lfv / llama-server):** aynı GPU kilidini kullanmalı:
-   `filelock.FileLock(<GPU_LOCK_PATH>)` (varsayılan `C:\Users\Emre\gpu_shared.lock`), GPU işinden
-   önce al, bitince bırak. Aksi halde iki pipeline aynı anda VRAM'e girer.
+9. **Long-form pipeline (utube-lfv / llama-server):** başka bir PC'de çalışıyor; bu makinenin GPU'larını
+   paylaşmadığı için ortak GPU kilidine gerek yok. (`GPU_LOCK_PATH` bu PC'deki servisler arasında kullanılmaya
+   devam ediyor: Whisper, Qwen, render ve yorum servisi aynı anda GPU'ya girmez.)
 10. **Arka plan müziği lisansı:** `bg_music/*_riskli` parçaları YouTube Audio Library'den görünüyor
     (The Grey Room, Patrick Patrikios…). Bu lisans YouTube içindir; Instagram sesi susturabilir veya
     engelleyebilir. Bu yüzden müzik artık **varsayılan olarak kapalı** (`BG_MUSIC_ENABLED=false`, render'a

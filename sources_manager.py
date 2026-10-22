@@ -109,6 +109,20 @@ def blacklist_source(session, source_id: Optional[int], reason: str):
         log.warning("source %s blacklisted: %s", src.channel_url, reason)
 
 
+def entry_published_at(e: dict) -> Optional[_dt.datetime]:
+    """Publish date of a flat-playlist entry (timestamp or upload_date YYYYMMDD), UTC naive."""
+    ts = e.get("timestamp") or e.get("release_timestamp")
+    if ts:
+        return _dt.datetime.utcfromtimestamp(ts)
+    d = e.get("upload_date")
+    if d and len(str(d)) == 8:
+        try:
+            return _dt.datetime.strptime(str(d), "%Y%m%d")
+        except ValueError:
+            return None
+    return None
+
+
 def _channel_key(e: dict) -> Optional[str]:
     url = e.get("channel_url") or e.get("uploader_url")
     if not url and e.get("channel_id"):
@@ -502,7 +516,8 @@ def plan_production(session, needs: dict, now=None, yt=None, rng=None) -> List[S
                 plan.append(SourceVideo(url=url, niche=sector.name, source_id=src.id,
                                         source_handle=src.handle or handle_from_url(src.channel_url),
                                         source_name=src.title or "", music_slug=sector.music_slug,
-                                        max_clips=max_clips))
+                                        max_clips=max_clips, title=e.get("title") or "",
+                                        published_at=entry_published_at(e)))
                 session.add(ProcessedSourceVideos(video_url=url, sector_id=sector_id, status="PLANNED",
                                                   processed_at=utcnow()))
             src.last_checked_at = utcnow()
@@ -565,7 +580,8 @@ def fast_lane(session, now=None, yt=None, pipeline_factory=None, llm=None) -> di
             continue
         sec = session.get(Sectors, src.sector_id)
         plan.append(SourceVideo(url=url, niche=sec.name, source_id=src.id, source_handle=src.handle or "",
-                                source_name=src.title or "", music_slug=sec.music_slug, max_clips=3, priority=1))
+                                source_name=src.title or "", music_slug=sec.music_slug, max_clips=3, priority=1,
+                                title=entries[0].get("title") or "", published_at=entry_published_at(entries[0])))
         session.add(ProcessedSourceVideos(video_url=url, sector_id=src.sector_id, status="FAST_LANE",
                                           processed_at=now))
     session.commit()

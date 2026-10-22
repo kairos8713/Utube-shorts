@@ -71,6 +71,7 @@ class ProductionStore:
             cycle_id=self.cycle_id, time_sensitive=cand.time_sensitive,
             clip_duration=cand.render_info.get("duration"), is_used=False, created_at=utcnow(),
             render_time_seconds=cand.render_info.get("elapsed"),
+            source_title=(src.title or None), source_published_at=src.published_at,
         )
         self.s.add(v)
         self.s.flush()

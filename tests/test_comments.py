@@ -168,7 +168,7 @@ def test_full_test_good_reply_passes():
     good = "The math on the 1% fee hasn't changed, and you can still buy index funds yourself in under three minutes."
     assert cr.reply_problems(good, FT_CTX, []) == []
     assert cr.reply_problems("He says he only takes business trips, never plain vacations.", FT_CTX, []) == []
-    assert cr.reply_problems("I'm not sure, the clip doesn't name the book.", FT_CTX, []) == []   # honest unknown
+    assert cr.NOT_IN_CLIP_RE.search("I'm not sure, the clip doesn't name the book.")   # now skipped, not posted
 
 
 def test_reply_prompt_carries_source_block_and_retries_once(db, setup):
@@ -190,3 +190,93 @@ def test_reply_prompt_carries_source_block_and_retries_once(db, setup):
     msgs = t.calls[0][2]["messages"]
     assert "CURATOR" in msgs[0]["content"]
     assert "<<<DATA SOURCE" in msgs[1]["content"] and "The Money Guy Show (@MoneyGuyShow)" in msgs[1]["content"]
+
+
+
+# ── 2nd decision on replies: name the episode, skip non-answers and corrections ──
+
+def _reply_setup(db, setup, published=True):
+    import datetime as dt
+    from models import Source
+    a, p, _, ig = setup
+    src = Source(channel_url="https://www.youtube.com/@MoneyGuyShow", title="The Money Guy Show",
+                 handle="MoneyGuyShow", status="TRIAL", sector_id=a.sector_id)
+    db.add(src)
+    db.commit()
+    p.source_id = src.id
+    v = db.get(videos_model(), p.video_id)
+    v.source_title = "We're Financial Advisors. This Internet Advice Is WILD."
+    v.source_published_at = dt.datetime(2026, 10, 15) if published else None
+    db.commit()
+    return a, p, ig
+
+
+def videos_model():
+    from models import videos
+    return videos
+
+
+def test_source_block_names_the_episode_and_date(db, setup):
+    from test_llm import chat_reply, make
+    a, p, ig = _reply_setup(db, setup)
+    c = _comment(db, a, p, "What's the name of the full episode?")
+    good = "It's from 'We're Financial Advisors. This Internet Advice Is WILD.' on The Money Guy Show's channel."
+    client, t = make([chat_reply('{"reply": "%s"}' % good)])
+    text, err = cr.write_reply(db, c, llm=client)
+    assert text == good and err is None
+    user = t.calls[0][2]["messages"][1]["content"]
+    assert "Source video (the full episode): 'We're Financial Advisors." in user and "published 2026-10-15" in user
+    assert cr.reply_problems("You can find the full episode on their channel.", "", []) == []    # no longer banned
+
+
+def test_redirects_stay_banned():
+    for bad in ("Link in bio!", "Check the description for the link.", "DM us for details.",
+                "Full episode at youtube.com/watch?v=x", "See the URL in the description."):
+        assert cr.reply_problems(bad, "", []), bad
+
+
+def test_model_can_choose_not_to_reply(db, setup):
+    from test_llm import chat_reply, make
+    a, p, ig = _reply_setup(db, setup)
+    c = _comment(db, a, p, "Which book is he talking about?")
+    client, t = make([chat_reply('{"reply": null, "skip_reason": "no book is named in the clip"}')])
+    text, err = cr.write_reply(db, c, llm=client)
+    assert text is None and err.startswith("skipped:") and len(t.calls) == 1
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("non_answer", [
+    "The clip doesn't say how long it takes to see results.",
+    "The clip does not mention a specific book.",
+    "The clip doesn't specify a strategy for people starting with no money.",
+    "He doesn't mention a book in the clip.",
+    "The clip doesn't actually mention saying no to opportunities, so that part isn't covered in this snippet.",
+    "The clip focuses on the math of fees, so it doesn't really address luck in the market.",
+    "That isn't covered here.",
+])
+def test_non_answers_and_corrections_are_skipped_without_retry(db, setup, non_answer):
+    from test_llm import chat_reply, make
+    a, p, ig = _reply_setup(db, setup)
+    c = _comment(db, a, p, "Is this still true?")
+    client, t = make([chat_reply('{"reply": "%s"}' % non_answer)] * 2)
+    text, err = cr.write_reply(db, c, llm=client)
+    assert text is None and err.startswith("skipped:") and len(t.calls) == 1      # no retry
+
+
+def test_agreeing_discussion_reply_is_kept_and_skips_are_logged(db, setup):
+    from models import Decision
+    from test_llm import chat_reply, make
+    a, p, ig = _reply_setup(db, setup)
+    c = _comment(db, a, p, "People will hate this take but he's completely right.")
+    agree = "Agreed, and he backs it up with the 1% fee math."
+    client, _ = make([chat_reply('{"reply": "%s"}' % agree)])
+    assert cr.write_reply(db, c, llm=client) == (agree, None)
+    c2 = _comment(db, a, p, "I think luck matters more.")
+    c2.classification = "discussion"
+    db.commit()
+    client2, _ = make([chat_reply('{"reply": "The clip does not really address luck."}')])
+    assert cr.decide(db, c2, NOW, random.Random(1), llm=client2, client_factory=lambda acc: ig) == "IGNORED"   # 0.13 < 0.8 → tries a reply
+    d = db.query(Decision).filter(Decision.task == "comment_reply").order_by(Decision.id.desc()).first()
+    assert d.validation.startswith("SKIPPED")

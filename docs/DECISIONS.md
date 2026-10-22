@@ -359,3 +359,16 @@ Same inputs for both models (2 real Whisper samples from step A + 10 comments in
   a launcher with the real interpreter as child), watchdog first; Ollama is not touched. Pure PowerShell —
   no taskkill (this machine's sessions may lack System32 in PATH); `-DryRun` lists only. Live-tested with a
   dummy 3-process tree: all stopped, exit 0, other processes untouched.
+
+## D-040 Comment replies, 2nd decision: name the episode, skip non-answers (Emre, 2026-10-23)
+- **Kural (Emre):** SOURCE block gets the source video's title + publish date so an episode question can be
+  answered ("It's from 'X' on <channel>'s channel"); "full episode" is no longer banned (links / URLs /
+  "link in bio/description" / DM stay banned). If the answer is not in the clip or SOURCE the model returns
+  `{"reply": null, "skip_reason": …}`; "the clip doesn't say/mention/specify…" replies and replies that
+  correct the commenter ("that isn't in this clip") are skipped directly, without a retry.
+- **Karar (details):** title/date are stored per clip (`videos.source_title`, `source_published_at`, migration
+  005), filled at planning time from the channel listing (flat-entry timestamp or upload_date); clips made
+  before this have none and the SOURCE block then has no title line. The validator leaves the known source
+  title out of its checks (titles contain full stops and words like "We're"). Skips are logged as
+  `SKIPPED: …` in the decision log (rule failures stay `REJECTED: …`). The reply similarity threshold is
+  unchanged, so a second identical episode question on the same account gets no reply (reported).

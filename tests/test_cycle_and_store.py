@@ -93,5 +93,6 @@ def test_migrations_on_legacy_schema(tmp_path):
     assert c.execute("SELECT status, daily_post_cap FROM owned_channels").fetchone() == ("WARMUP", 1)
     assert c.execute("SELECT music_slug FROM sectors").fetchone()[0] == "tech_ai_riskli"
     assert c.execute("SELECT handle, status FROM sources").fetchone() == ("MrBeast", "TRIAL")
+    assert {"source_title", "source_published_at"} <= {r[1] for r in c.execute("PRAGMA table_info(videos)")}
     c.close()
     assert db_migrate.run(path, log=lambda *_: None) == []

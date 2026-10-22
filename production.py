@@ -12,6 +12,7 @@ Everything external is injectable, so the pipeline is tested with fakes and the
 end-to-end DRY_RUN can swap in synthetic footage / the mock LLM.
 """
 import os
+import datetime as _dt
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -45,6 +46,8 @@ class SourceVideo:
     max_clips: int = 3
     priority: int = 0
     local_path: Optional[str] = None       # pre-downloaded / synthetic file
+    title: str = ""                        # source video title (comment replies can name the episode)
+    published_at: Optional[_dt.datetime] = None
     # filled by the pipeline
     path: Optional[str] = None
     segments: list = field(default_factory=list)

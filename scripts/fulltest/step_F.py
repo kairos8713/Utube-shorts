@@ -63,7 +63,8 @@ def main():
         c = s.get(Comment, meta["comment_id"])
         r = s.query(CommentReply).filter_by(comment_id=c.id).first()
         rej = s.query(Decision).filter(Decision.task == "comment_reply",
-                                       Decision.proposed_action.like(f'%"comment_id": {c.id}%'),
+                                       (Decision.proposed_action.like(f'%"comment_id": {c.id}}}%')     # exact id:
+                                        | Decision.proposed_action.like(f'%"comment_id": {c.id},%')),  # not 1 ↔ 11
                                        Decision.validation != "OK").first()
         rows.append({**meta, "label": c.classification, "class_reason": c.class_reason, "status": c.status,
                      "needs_attention": c.needs_attention, "reply": r.text if r else None,

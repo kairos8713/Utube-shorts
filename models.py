@@ -124,6 +124,8 @@ class videos(Base):
     time_sensitive  = Column(Boolean, default=False)
     clip_duration   = Column(Float, nullable=True)
     files_deleted_at = Column(DateTime, nullable=True)
+    source_title    = Column(String, nullable=True)        # title of the long-form source video
+    source_published_at = Column(DateTime, nullable=True)  # its YouTube publish date
 
 class logs(Base):
     __tablename__ = 'logs'

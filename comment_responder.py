@@ -61,8 +61,17 @@ FIRST_PERSON_CLAIM_RE = re.compile(
     r"|\bI've\b"
     r"|\bmy (wife|husband|partner|kids?|family|mom|dad|son|daughter|business|money|mortgage|house|job|"
     r"story|book|show|podcast|guest|clients?)\b", re.I)
-REDIRECT_RE = re.compile(r"\b(links?|description|bio|dms?|direct message|full (episode|video|interview)|"
-                         r"account owner)\b", re.I)
+REDIRECT_RE = re.compile(r"\b(links?|urls?|description|bio|dms?|direct message|account owner)\b", re.I)
+# "the clip doesn't say …" non-answers and "that isn't in this clip" corrections of the commenter: no reply
+# at all (2nd decision on replies, 2026-10-23) — skipped directly, no retry
+NOT_IN_CLIP_RE = re.compile(
+    r"\b(clip|snippet|video|episode|segment|he|she|they|it|speaker|guest|host)\s+"
+    r"(does ?n'?t|does not|did ?n'?t|did not|never)\s+(actually\s+|really\s+|specifically\s+|explicitly\s+)?"
+    r"(say|says|mention|mentions|specify|address|cover|discuss|talk about|name|give|explain|include|state|"
+    r"reveal|get into|go into|touch on)\b"
+    r"|\b(is ?n'?t|is not|was ?n'?t|was not|not)\s+(really\s+)?(covered|mentioned|addressed|discussed|included|"
+    r"part of|shown)\b"
+    r"|\bnot\s+in\s+(this|the)\s+(clip|snippet|video|part)\b", re.I)
 DODGE_RE = re.compile(r"(doesn'?t (quite )?match the topic|off[- ]topic|not related to (this|the) (clip|topic))", re.I)
 
 
@@ -157,21 +166,31 @@ _REPLY_ROLE = """You reply to ONE comment under a short clip, as the CURATOR acc
 The people speaking in the clip are NOT you: they are from the source channel in the SOURCE block.
 Never speak for them in the first person ("I", "we", "our", "my wife"): refer to them in the third
 person ("he says...", "the guest argues...", "they explain..."). Write ONE short natural sentence
-(max 120 characters) that responds to the comment using only what is in the clip transcript,
-caption and SOURCE block. If the comment asks something the clip does not answer (a name, a book,
-the episode title, what happened next), say briefly and honestly that the clip doesn't say.
-Never invent facts, numbers or names. Do not turn a question down as off-topic: answer what you can.
-No links, no pointing to a description / bio / DM / "full episode", no @mentions, no hashtags,
-no asking people to follow/subscribe, no emojis spam (max 1)."""
-_REPLY_SPEC = '{"reply": "<one sentence>"}'
+(max 120 characters) using only what is in the clip transcript, caption and SOURCE block.
+If someone asks which episode / video this is, name it from SOURCE: "It's from 'TITLE' on CHANNEL's
+channel" (add the date if it helps).
+If the answer is NOT in the clip or the SOURCE block (a name, a book, a number, what happened next),
+do not write a reply: return {"reply": null, "skip_reason": "<why>"}. Never answer "the clip doesn't
+say / mention / specify ...".
+For opinions and discussion: agree, or add one short relevant point from the clip. Never correct the
+commenter by saying something is not in the clip — if you cannot add anything, skip.
+Never invent facts, numbers or names. No links or URLs, no "link in bio / description", no DMs,
+no @mentions, no hashtags, no asking people to follow/subscribe, no emojis spam (max 1)."""
+_REPLY_SPEC = '{"reply": "<one sentence>"}  or, when you should not reply: {"reply": null, "skip_reason": "<why>"}'
 
 
-def reply_problems(reply: str, context_text: str, previous: list) -> list:
+def reply_problems(reply: str, context_text: str, previous: list, titles=()) -> list:
+    """`titles`: the source video title — naming the episode is allowed, so the title text itself is not
+    checked (it may contain full stops, "We're", "link"...)."""
     errs = []
     r = (reply or "").strip()
     if not r or len(r) > MAX_REPLY_CHARS:
         errs.append(f"reply must be 1-{MAX_REPLY_CHARS} characters")
-    if len([s for s in re.split(r"[.!?]+(?:\s|$)", r) if s.strip()]) > 1:
+    chk = r.replace("\u2019", "'")
+    for t in titles:
+        if t and len(t) >= 4:
+            chk = re.sub(re.escape(t.replace("\u2019", "'")), "TITLE", chk, flags=re.I)
+    if len([s for s in re.split(r"[.!?]+(?:\s|$)", chk) if s.strip()]) > 1:
         errs.append("exactly one sentence")
     if LINK_RE.search(r):
         errs.append("no links")
@@ -181,11 +200,11 @@ def reply_problems(reply: str, context_text: str, previous: list) -> list:
         errs.append("no follow/subscribe calls")
     if "#" in r:
         errs.append("no hashtags")
-    flat = r.replace("\u2019", "'")
+    flat = chk
     if FIRST_PERSON_CLAIM_RE.search(flat):
         errs.append("you are the curator: talk about the people in the clip in the third person, no I/we/our")
     if REDIRECT_RE.search(flat):
-        errs.append("no links, description, bio, DM, full-episode or account-owner references")
+        errs.append("no links, URLs, description, bio, DM or account-owner references")
     if DODGE_RE.search(flat):
         errs.append("do not turn the question down as off-topic")
     nums = re.findall(r"\d[\d.,]*", r)
@@ -204,32 +223,51 @@ def source_info(session, post, vid) -> str:
     if src is not None:
         parts.append(f"Source channel on YouTube: {src.title or '?'}" + (f" (@{src.handle})" if src.handle else ""))
     parts.append("The people speaking in the clip are from that channel; this account only shares the clip.")
+    if vid.source_title:
+        when = f", published {vid.source_published_at:%Y-%m-%d}" if vid.source_published_at else ""
+        parts.append(f"Source video (the full episode): '{vid.source_title}'{when}")
     if vid.topic:
         parts.append(f"Clip topic: {vid.topic}")
     return "\n".join(parts)
 
 
 def write_reply(session, comment, llm=None):
+    """(text, None) | (None, "skipped: <why>") — the model chose not to answer / a non-answer was dropped |
+    (None, "<error>") — no valid reply after one retry."""
     llm = llm or get_llm()
     post = session.get(Post, comment.post_id)
     vid = session.get(videos, post.video_id)
-    context = f"{vid.transcript or ''}\n{vid.caption or ''}"
+    context = f"{vid.transcript or ''}\n{vid.caption or ''}\n{vid.source_title or ''}"
     previous = [r.text for r in session.query(CommentReply).filter_by(owned_channel_id=comment.owned_channel_id)
                 .order_by(CommentReply.id.desc()).limit(100).all()]
-    user = "\n\n".join([data_block("SOURCE", source_info(session, post, vid), 400),
+    user = "\n\n".join([data_block("SOURCE", source_info(session, post, vid), 600),
                         data_block("CLIP_TRANSCRIPT", vid.transcript or "", 3000),
                         data_block("CAPTION", vid.caption or "", 800),
                         data_block("COMMENT", comment.text, 1000),
                         "Write the reply JSON."])
     msgs = [{"role": "system", "content": system_prompt(_REPLY_ROLE, _REPLY_SPEC)},
             {"role": "user", "content": user}]
+
+    def validate(o):
+        if o.get("reply") is None:
+            return [] if isinstance(o.get("skip_reason"), str) else ["give skip_reason when reply is null"]
+        if not isinstance(o.get("reply"), str):
+            return ["reply must be a string or null"]
+        if NOT_IN_CLIP_RE.search(o["reply"].replace("\u2019", "'")):
+            return []                      # accepted here, dropped below without a retry
+        return reply_problems(o["reply"], context, previous, titles=(vid.source_title or "",))
     try:
         # a rejected reply gets ONE more try; after that no reply at all
-        obj = llm.chat_json(msgs, task="comment_reply", max_tokens=80, temperature=0.8, retries=1,
-                            validator=lambda o: reply_problems(o.get("reply", ""), context, previous))
-        return obj["reply"].strip(), None
+        obj = llm.chat_json(msgs, task="comment_reply", max_tokens=100, temperature=0.8, retries=1,
+                            validator=validate)
     except LLMError as e:
         return None, str(e)
+    if obj.get("reply") is None:
+        return None, f"skipped: {str(obj.get('skip_reason') or 'model chose not to reply')[:200]}"
+    text = obj["reply"].strip()
+    if NOT_IN_CLIP_RE.search(text.replace("\u2019", "'")):
+        return None, f"skipped: non-answer / 'not in the clip' correction: {text[:120]}"
+    return text, None
 
 
 def _norm_handle(name: str) -> str:
@@ -300,7 +338,8 @@ def decide(session, comment, now=None, rng=None, llm=None, client_factory=client
     text, err = write_reply(session, comment, llm)
     if not text:
         comment.status = "IGNORED"
-        log_decision(session, "comment_reply", {"comment_id": comment.id}, f"REJECTED: {err}", False,
+        verdict = "SKIPPED" if (err or "").startswith("skipped:") else "REJECTED"
+        log_decision(session, "comment_reply", {"comment_id": comment.id}, f"{verdict}: {err}", False,
                      account_id=acc.id)
         return "IGNORED"
     lo, hi = guardrails.REPLY_DELAY_MINUTES
