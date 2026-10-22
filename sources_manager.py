@@ -5,9 +5,13 @@ Per cycle (cycle_maintenance):
   * discovery per niche: Qwen writes search queries → `yt-dlp ytsearch50:<q>
     --flat-playlist` → candidate channels → stats (subscribers, avg views,
     upload rate, durations, description, recent titles)
-  * scoring: Qwen judges niche fit + clip-permission signals; code measures
-    speech ratio + language (Whisper on a 3-min audio sample) and saturation
-    (how many clip channels already cut this source); score ≥ threshold → TRIAL
+  * exclusion (source_rules.py, before any model call): editable publisher list (TED/TEDx, news/TV,
+    studios, labels), YouTube category Music, reaction/compilation format (≥ 30 % of the last 15 videos)
+  * scoring: Qwen judges niche fit (last 15 titles + descriptions), format suitability and quotes any
+    clip-permission wording (kept only if the quote is really in the description; no wording → permission
+    unknown, left out of the score); code measures speech ratio + language (Whisper on a 3-min audio
+    sample) and saturation (distinct channels posting "<name> clips / podcast clips / shorts");
+    score ≥ threshold → TRIAL
   * trial evaluation: 3–5 trial clips on different accounts; 72 h after the
     last one is published, median relative views ≥ 0.8 → ACTIVE else REJECTED
   * bandit update (Beta posterior per source from relative performance)
@@ -26,6 +30,7 @@ from collections import defaultdict
 from typing import List, Optional
 
 import downloader
+import source_rules
 from alerts import raise_alert
 from analytics import relative
 from brain.core import log_decision
@@ -62,6 +67,10 @@ class YouTubeAPI:
     def channel_videos(self, channel_url: str, n: int = 15) -> dict:
         url = channel_url.rstrip("/") + "/videos"
         return downloader.ytdlp_json(url, ["--flat-playlist", "--playlist-end", str(n)], timeout=180)
+
+    def video_categories(self, video_url: str) -> list:
+        """YouTube categories of one video (metadata only, no download)."""
+        return downloader.ytdlp_json(video_url, ["--skip-download"], timeout=180).get("categories") or []
 
     def speech_sample(self, video_url: str):
         """(speech_ratio, language) from a 3-min audio sample (holds the GPU lock)."""
@@ -143,7 +152,9 @@ def channel_stats(meta: dict) -> dict:
         "yt_channel_id": meta.get("channel_id"),
         "subscribers": meta.get("channel_follower_count"),
         "description": (meta.get("description") or "")[:2000],
-        "recent_titles": [e.get("title") for e in entries[:12] if e.get("title")],
+        "recent_titles": [e.get("title") for e in entries[:source_rules.RECENT_VIDEOS] if e.get("title")],
+        "recent_videos": [(e.get("title") or "", (e.get("description") or "")[:300])
+                          for e in entries[:source_rules.RECENT_VIDEOS]],
         "avg_duration_s": statistics.mean(durs) if durs else None,
         "avg_views": statistics.mean(views) if views else None,
         "uploads_per_week": per_week,
@@ -181,55 +192,100 @@ def search_queries(session, niche: str, n: int, llm=None) -> list:
 
 
 _A_ROLE = """You assess whether a YouTube channel is a good SOURCE of clips for an Instagram
-Reels page in the given niche. niche_fit: 0-1 how well its videos fit the niche. clip_permission:
-0-1 strength of signals that clipping is allowed/encouraged (e.g. 'clips welcome', 'feel free to
-use', official clips program, creative-commons) — 0.3 if nothing is said, lower if it forbids
-re-uploads."""
-_A_SPEC = '{"niche_fit": <0-1>, "clip_permission": <0-1>, "reason": "<max 25 words>"}'
+Reels page in the given niche. Use the channel description and its last 15 videos (titles +
+descriptions).
+niche_fit: 0-1 how well its videos fit the niche (a music channel, a gaming channel or a news desk is
+a poor fit for a psychology or finance niche even if one title sounds related).
+format: "ok" for original long-form talk (podcasts, interviews, talks, commentary), else one of
+"music", "reaction_compilation" (reacts to / compiles other people's videos or TikToks), "news_tv",
+"studio" (film/series studio), "music_label", "reupload" (posts other creators' content), "other".
+clip_permission: "allowed" or "forbidden" ONLY if the description says so explicitly (clips welcome,
+feel free to use, creative commons / no re-uploads, all rights reserved...), else "unknown".
+clip_permission_evidence: the exact words from the description that say it, or "" when unknown."""
+_A_SPEC = ('{"niche_fit": <0-1>, "format": "ok|music|reaction_compilation|news_tv|studio|music_label|reupload|other", '
+           '"clip_permission": "allowed|forbidden|unknown", "clip_permission_evidence": "<exact quote or empty>", '
+           '"reason": "<max 25 words>"}')
+FORMATS = ("ok", "music", "reaction_compilation", "news_tv", "studio", "music_label", "reupload", "other")
 
 
 def _v_assess(o):
     errs = []
-    for k in ("niche_fit", "clip_permission"):
-        if not isinstance(o.get(k), (int, float)) or not 0 <= o[k] <= 1:
-            errs.append(f"{k} must be a number 0-1")
+    if not isinstance(o.get("niche_fit"), (int, float)) or not 0 <= o["niche_fit"] <= 1:
+        errs.append("niche_fit must be a number 0-1")
+    if o.get("format") not in FORMATS:
+        errs.append(f"format must be one of {FORMATS}")
+    if o.get("clip_permission") not in ("allowed", "forbidden", "unknown"):
+        errs.append("clip_permission must be allowed|forbidden|unknown")
+    if not isinstance(o.get("clip_permission_evidence", ""), str):
+        errs.append("clip_permission_evidence must be a string")
     return errs
+
+
+def _videos_block(stats: dict) -> str:
+    vids = stats.get("recent_videos") or [(t, "") for t in stats.get("recent_titles") or []]
+    return "\n".join(f"- {t}" + (f" — {d}" if d else "") for t, d in vids[:source_rules.RECENT_VIDEOS])
 
 
 def assess(session, niche: str, stats: dict, llm=None) -> dict:
     llm = llm or get_llm()
     user = "\n\n".join([f"NICHE: {niche}", data_block("CHANNEL_DESCRIPTION", stats.get("description") or "", 2000),
-                        data_block("RECENT_VIDEO_TITLES", "\n".join(stats.get("recent_titles") or []), 2000),
+                        data_block("RECENT_VIDEOS", _videos_block(stats), 4000),
                         "Assess this channel."])
     msgs = [{"role": "system", "content": system_prompt(_A_ROLE, _A_SPEC)}, {"role": "user", "content": user}]
     try:
-        return llm.chat_json(msgs, task="source_assessment", validator=_v_assess, max_tokens=150)
+        return llm.chat_json(msgs, task="source_assessment", validator=_v_assess, max_tokens=220)
     except LLMError as e:
         log.warning("assessment failed: %s", e)
-        return {"niche_fit": 0.0, "clip_permission": 0.0, "reason": f"LLM failed: {e}"}
+        return {"niche_fit": 0.0, "format": "ok", "clip_permission": "unknown", "clip_permission_evidence": "",
+                "reason": f"LLM failed: {e}"}
+
+
+def resolve_permission(description: str, assessment: dict):
+    """0.9 / 0.0 from explicit description wording (code regex first, then the model's quote if it is
+    really in the description); None = unknown (left out of the score)."""
+    value, _ = source_rules.permission_from_text(description)
+    if value is not None:
+        return value
+    verdict = assessment.get("clip_permission")
+    if verdict in ("allowed", "forbidden") and \
+            source_rules.evidence_in_text(assessment.get("clip_permission_evidence") or "", description):
+        return source_rules.PERMISSION_ALLOWED if verdict == "allowed" else source_rules.PERMISSION_FORBIDDEN
+    return None
 
 
 # ── scoring ──────────────────────────────────────────────────────────────────
 
-def saturation(yt, stats: dict, own_url: str) -> float:
-    """Share of 'clips' search results that come from OTHER channels mentioning this source."""
-    name = (stats.get("title") or "").strip()
-    if not name:
-        return 0.0
-    try:
-        hits = yt.search(f"{name} clips", 20)
-    except downloader.DownloadError:
-        return 0.5
-    others = {(_channel_key(e) or "") for e in hits
-              if name.lower() in (e.get("title") or "").lower() and _channel_key(e) and _channel_key(e) != own_url}
-    return round(min(1.0, len(others) / 10.0), 2)
+SATURATION_QUERIES = ("{} clips", "{} podcast clips", "{} shorts")
 
 
-def score_candidate(stats: dict, assessment: dict, speech: float, sat: float) -> float:
+def saturation(yt, stats: dict, own_url: str):
+    """(0-1, n): n = distinct OTHER channels whose result titles mention the normalized channel name in
+    searches for "<name> clips / podcast clips / shorts"; 10+ channels → 1.0."""
+    norm = source_rules.normalized_name(stats.get("title") or "")
+    if not norm:
+        return 0.0, 0
+    others = set()
+    for q in SATURATION_QUERIES:
+        try:
+            hits = yt.search(q.format(norm), 20)
+        except downloader.DownloadError:
+            return 0.5, -1
+        for e in hits:
+            key = _channel_key(e)
+            if key and key != own_url and source_rules.mentions_name(e.get("title") or "", norm):
+                others.add(key)
+        yt.delay()
+    return round(min(1.0, len(others) / 10.0), 2), len(others)
+
+
+def score_candidate(stats: dict, assessment: dict, speech: float, sat: float, permission=None) -> float:
+    """Weighted 0-1. An unknown clip permission (None) is left out and the other weights are rescaled."""
     views = stats.get("avg_views") or 0
     views_factor = min(1.0, math.log10(views + 1) / 6.0)      # 1M avg views → 1.0
-    return round(0.35 * assessment.get("niche_fit", 0) + 0.15 * assessment.get("clip_permission", 0)
-                 + 0.25 * speech + 0.15 * (1 - sat) + 0.10 * views_factor, 3)
+    base = (0.35 * assessment.get("niche_fit", 0) + 0.25 * speech + 0.15 * (1 - sat) + 0.10 * views_factor)
+    if permission is None:
+        return round(base / 0.85, 3)
+    return round(base + 0.15 * permission, 3)
 
 
 def discover_niche(session, sector, yt=None, llm=None, intensify=False, max_candidates=None) -> dict:
@@ -253,19 +309,37 @@ def discover_niche(session, sector, yt=None, llm=None, intensify=False, max_cand
         reason = None
         if not stats["sample_video"] or (stats["avg_duration_s"] or 0) < MIN_AVG_DURATION_S:
             reason = "no long-form videos"
-        a = {"niche_fit": 0, "clip_permission": 0}
-        speech, lang, sat = 0.0, "", 1.0
+        a = {"niche_fit": 0, "format": "", "clip_permission": "unknown"}
+        speech, lang, sat, sat_n, permission = 0.0, "", 1.0, 0, None
+        if not reason:                                   # code rules first: no model call, no download
+            reason = source_rules.excluded_publisher(stats["title"] or "", stats["handle"] or "",
+                                                     stats["yt_channel_id"] or "")
+        if not reason:
+            cats = []
+            if hasattr(yt, "video_categories"):
+                try:
+                    cats = yt.video_categories(stats["sample_video"])
+                except downloader.YouTubeBlocked:
+                    raise
+                except downloader.DownloadError as e:
+                    log.warning("categories of %s unknown: %s", stats["sample_video"], e)
+            reason = source_rules.code_exclusion(stats["title"] or "", stats["handle"] or "",
+                                                 stats["yt_channel_id"] or "", stats.get("recent_videos") or [],
+                                                 cats)
         if not reason:
             a = assess(session, sector.name, stats, llm)
-            if a["niche_fit"] < 0.4:
+            if a.get("format", "ok") != "ok":
+                reason = f"unsuitable format: {a['format']} (Qwen)"
+            elif a["niche_fit"] < 0.4:
                 reason = f"niche fit {a['niche_fit']}"
+            permission = resolve_permission(stats["description"], a)
         if not reason:
             speech, lang = yt.speech_sample(stats["sample_video"])
             if lang and lang != "en":
                 reason = f"language {lang}"
         if not reason:
-            sat = saturation(yt, stats, url)
-        score = score_candidate(stats, a, speech, sat) if not reason else 0.0
+            sat, sat_n = saturation(yt, stats, url)
+        score = score_candidate(stats, a, speech, sat, permission) if not reason else 0.0
         status = "TRIAL" if not reason and score >= SCORE_THRESHOLD else "REJECTED"
         src = Source(channel_url=url, handle=stats["handle"] or handle_from_url(url), title=stats["title"],
                      sector_id=sector.id,
@@ -273,9 +347,10 @@ def discover_niche(session, sector, yt=None, llm=None, intensify=False, max_cand
                      avg_views=stats["avg_views"], uploads_per_week=stats["uploads_per_week"],
                      avg_duration_s=stats["avg_duration_s"], description=stats["description"],
                      recent_titles=json.dumps(stats["recent_titles"]), niche_fit=a.get("niche_fit"),
-                     clip_permission=a.get("clip_permission"), speech_ratio=speech, language=lang,
+                     clip_permission=permission, speech_ratio=speech, language=lang,
                      saturation=sat, score=score, status=status,
-                     status_reason=reason or f"score {score} vs threshold {SCORE_THRESHOLD}",
+                     status_reason=reason or (f"score {score} vs threshold {SCORE_THRESHOLD} (clip channels: "
+                                              f"{sat_n}, permission: {'unknown' if permission is None else permission})"),
                      status_changed_at=utcnow(), discovered_at=utcnow())
         session.add(src)
         session.flush()

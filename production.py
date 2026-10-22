@@ -214,6 +214,16 @@ class Pipeline:
                                 continue
                             cands.append(cand)
                     cands.sort(key=lambda c: -c.score)
+                    if len(cands) > 1:                 # one ranking over the whole video, not per segment
+                        ranking = qwen_specialized.rank_clips(
+                            [{"id": f"c{i}", "topic": c.topic, "reason": c.reason,
+                              "text": " ".join(w["text"] for w in clip_words(seg_words(c), c.start, c.end))}
+                             for i, c in enumerate(cands)], src.niche, llm=self.llm)
+                        if ranking:
+                            by_id = {f"c{i}": c for i, c in enumerate(cands)}
+                            for r in ranking:
+                                by_id[r["id"]].score = r["score"]
+                            cands = [by_id[r["id"]] for r in ranking]
                     picked = []
                     for cand in cands:                 # best first; a rejected one makes room for the next
                         if len(picked) >= src.max_clips:

@@ -325,3 +325,26 @@ Same inputs for both models (2 real Whisper samples from step A + 10 comments in
   (`yt_forbidden_strikes`, video id + time), so they survive service restarts and are shared by the cycle,
   discovery samples and the fast lane; the same video counts once. Audio samples (discovery) count strikes
   but get no format retry. New block kind `FORBIDDEN_403_REPEATED` with its own fix hint.
+
+## D-038 Source selection rules + clip ranking (Emre's decision #5, 2026-10-23)
+- **Düzeltme (rapor hatası):** FULL_TEST_REPORT'ta "Queen (müzik kanalı)" dedim; yanlış. A'daki "Queen"
+  (UCGjj4ULTpqgcM6knuBv9h6Q) bir psikoloji/felsefe anlatım kanalı (Carl Jung, procrastination…), 12 videodan
+  2'si şarkı yüklemesi; açıklamada "Narration: Eternalised (Full Rights)" → başkasının anlatımını yeniden
+  yüklüyor. Psikoloji uyumu 0,85 makuldü; asıl sorun yeniden yükleme. Müzik kuralı yine uygulandı (Emre'nin
+  kararı) ve gerçek bir müzik kanalı örneğiyle test edildi; Qwen format değerlendirmesine "reupload" eklendi.
+- **Karar (details):** the exclusion list lives in config (`SOURCE_EXCLUDE_CHANNEL_IDS`, `SOURCE_EXCLUDE_NAME_PATTERNS`,
+  .env can override), with the channel ids YouTube reported in step A (TED, TEDx, TED-Ed, Bloomberg TV);
+  "TED" is matched case-sensitively (Ted Lasso fan channels are not TED); any channel with "News" or
+  "Television" in its name counts as a news/TV channel (broad on purpose). Code rules run before any model
+  call and before the category request; the category comes from the sample video's metadata (no download).
+  Reaction share uses title + description of the last 15 videos. Clip permission: code regex on the
+  description first, then the model's verdict ONLY with a quote that really occurs in the description;
+  otherwise None ("unknown") and the score is rescaled without that term. Saturation: distinct other
+  channels whose result titles contain all words of the normalized name, over "<name> clips / podcast
+  clips / shorts". Clip scores: 1–100 per segment (no ties in one answer, < 60 dropped) + one ranking call
+  per video over all aligned candidates (strictly decreasing, no ties); clips are picked in ranking order.
+  If the ranking call fails, the segment scores are kept. `videos.qwen_point` is now on the 1–100 scale
+  (older rows 0–9; only used for ordering).
+- **Ölçüm:** A2 (qwen3.8:27b, 4 ses örneği): TED dışlama listesiyle, "Too Late Now" Qwen'le
+  (reaction_compilation) elendi; doygunluk 1–7 kanal ölçüldü (eskiden hep 0); izin her kaynakta "bilinmiyor".
+  Gerçek transkriptte sıralama: 10 aday 98→48, tekrar eden puan 0.

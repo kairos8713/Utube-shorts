@@ -125,10 +125,40 @@ def test_unalignable_clip_is_rejected_and_the_next_candidate_used(tmp_path):
 
     def two_clips(messages, task, **k):
         if task == "clip_scoring":
-            return {"clips": [{"start": "00:30", "end": "00:59", "score": 9, "topic": "best", "reason": "r"},
-                              {"start": "00:34", "end": "00:54", "score": 8, "topic": "next", "reason": "r"}]}
+            return {"clips": [{"start": "00:30", "end": "00:59", "score": 90, "topic": "best", "reason": "r"},
+                              {"start": "00:34", "end": "00:54", "score": 80, "topic": "next", "reason": "r"}]}
         return orig(messages, task, **k)
     p.llm.chat_json = two_clips
     res = p.run([SourceVideo(url="u", niche="x", max_clips=1)])
     assert [c.topic for c in res.produced] == ["next"]
     assert (res.produced[0].start, res.produced[0].end) == (34.0, 54.15)
+
+
+class LongWhisper(FakeWhisper):
+    """120 words from 30 s, a full stop every 8 words (sentences start every 4 s: 30, 34, … 86)."""
+
+    def transcribe(self, path, words=False):
+        EVENTS.append("whisper")
+        words_ = [{"start": 30 + i * 0.5, "end": 30.4 + i * 0.5, "word": f"w{i}" + ("." if i % 8 == 7 else "")}
+                  for i in range(120)]
+        return {"language": "en", "segments": [{"start": 30, "end": 90, "text": "two good stories", "words": words_}]}
+
+
+def test_clips_are_picked_in_the_per_video_ranking_order(tmp_path):
+    """Segment scores say A > B; the ranking over the whole video says B first → B is produced."""
+    p = make_pipeline(tmp_path, whisper_factory=LongWhisper())
+    orig = p.llm.chat_json
+
+    def answers(messages, task, **k):
+        EVENTS.append(f"llm:{task}")
+        if task == "clip_scoring":
+            return {"clips": [{"start": "00:30", "end": "00:52", "score": 95, "topic": "A", "reason": "r"},
+                              {"start": "00:58", "end": "01:20", "score": 70, "topic": "B", "reason": "r"}]}
+        if task == "clip_ranking":
+            return {"ranking": [{"id": "c1", "score": 88}, {"id": "c0", "score": 64}]}
+        return orig(messages, task, **k)
+    p.llm.chat_json = answers
+    res = p.run([SourceVideo(url="u", niche="x", max_clips=1)])
+    assert "llm:clip_ranking" in EVENTS
+    assert [c.topic for c in res.produced] == ["B"] and res.produced[0].score == 88
+    assert (res.produced[0].start, res.produced[0].end) == (58.0, 82.0)   # tail stops at the next word (82.0)

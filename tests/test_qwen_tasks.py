@@ -4,17 +4,36 @@ from llm_mock import MockLLM
 
 def test_filter_clips_enforces_duration_score_overlap():
     raw = [
-        {"start": "00:10", "end": "00:32", "score": 9},   # 22 s ok
-        {"start": "00:20", "end": "00:42", "score": 8},   # overlaps first
-        {"start": "01:00", "end": "01:10", "score": 9},   # too short
-        {"start": "02:00", "end": "02:23", "score": 6},   # score too low
-        {"start": "02:50", "end": "03:14", "score": 7},   # beyond segment end (180)
-        {"start": 100, "end": 125, "score": 7},           # 25 s ok (numeric)
-        {"start": 130, "end": 163, "score": 7},           # 33 s: raw ok, clip_bounds decides (18–32 after alignment)
-        {"start": 40, "end": 80, "score": 7},             # 40 s too long even before alignment
+        {"start": "00:10", "end": "00:32", "score": 92},  # 22 s ok
+        {"start": "00:20", "end": "00:42", "score": 85},  # overlaps first
+        {"start": "01:00", "end": "01:10", "score": 90},  # too short
+        {"start": "02:00", "end": "02:23", "score": 55},  # score too low (< 60)
+        {"start": "02:50", "end": "03:14", "score": 70},  # beyond segment end (180)
+        {"start": 100, "end": 125, "score": 71},          # 25 s ok (numeric)
+        {"start": 130, "end": 163, "score": 66},          # 33 s: raw ok, clip_bounds decides (18–32 after alignment)
+        {"start": 40, "end": 80, "score": 65},            # 40 s too long even before alignment
     ]
     out = q.filter_clips(raw, segment_duration=180)
     assert [(c["start"], c["end"]) for c in out] == [(10.0, 32.0), (100.0, 125.0), (130.0, 163.0)]
+
+
+def test_clip_scores_are_1_to_100_without_ties():
+    ok = {"clips": [{"start": "00:10", "end": "00:32", "score": 88}, {"start": "01:00", "end": "01:22", "score": 71}]}
+    assert q.validate_scores(ok) == []
+    tie = {"clips": [{"start": "00:10", "end": "00:32", "score": 9}, {"start": "01:00", "end": "01:22", "score": 9}]}
+    assert "every clip needs a different score" in q.validate_scores(tie)
+    assert q.validate_scores({"clips": [{"start": "00:10", "end": "00:32", "score": 150}]})
+
+
+def test_ranking_validator_needs_every_id_once_strictly_decreasing():
+    ids = ["c0", "c1", "c2"]
+    good = {"ranking": [{"id": "c2", "score": 91}, {"id": "c0", "score": 78}, {"id": "c1", "score": 63}]}
+    assert q.validate_ranking(good, ids) == []
+    assert q.validate_ranking({"ranking": [{"id": "c2", "score": 90}, {"id": "c0", "score": 90},
+                                           {"id": "c1", "score": 60}]}, ids)                 # tie
+    assert q.validate_ranking({"ranking": [{"id": "c2", "score": 90}, {"id": "c0", "score": 80}]}, ids)  # missing id
+    repeated = sum(1 for a, b in zip(good["ranking"], good["ranking"][1:]) if a["score"] == b["score"])
+    assert repeated / len(ids) == 0.0
 
 
 def test_validate_caption_rules():

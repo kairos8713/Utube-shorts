@@ -32,7 +32,7 @@ def _clip_scoring(messages):
     start = int(stamps[0][0]) * 60 + int(stamps[0][1]) if stamps else 5
     clips = [{"start": f"{start // 60:02d}:{start % 60:02d}",
               "end": f"{(start + 22) // 60:02d}:{(start + 22) % 60:02d}",
-              "score": 8, "topic": "mock topic", "reason": "mock", "time_sensitive": False}]
+              "score": 80, "topic": "mock topic", "reason": "mock", "time_sensitive": False}]
     return {"clips": clips}
 
 
@@ -90,6 +90,11 @@ def _slot_plan(messages):
     return {"actions": actions, "reason": "mock: highest relative performance slots"}
 
 
+def _clip_ranking(messages):
+    ids = re.findall(r"^\[(c\d+)\]", _block(_user_text(messages), "CANDIDATES"), re.M)
+    return {"ranking": [{"id": i, "score": 90 - 7 * k} for k, i in enumerate(ids)]}
+
+
 def _source_queries(messages):
     niche = re.search(r"NICHE: (.+)", _user_text(messages))
     n = (niche.group(1).strip() if niche else "podcast")
@@ -97,7 +102,8 @@ def _source_queries(messages):
 
 
 def _source_assessment(messages):
-    return {"niche_fit": 0.7, "clip_permission": 0.5, "reason": "mock assessment"}
+    return {"niche_fit": 0.7, "format": "ok", "clip_permission": "unknown", "clip_permission_evidence": "",
+            "reason": "mock assessment"}
 
 
 def _account_review(messages):
@@ -115,6 +121,7 @@ TASKS = {
     "comment_classify": _comment_classify,
     "comment_reply": _comment_reply,
     "slot_plan": _slot_plan,
+    "clip_ranking": _clip_ranking,
     "source_queries": _source_queries,
     "source_assessment": _source_assessment,
     "account_review": _account_review,

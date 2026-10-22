@@ -188,9 +188,10 @@ def qwen_stats(step: str = None) -> dict:
 class Budget:
     """At most N YouTube video/audio downloads for the whole test (task rule: 8)."""
 
-    def __init__(self, limit: int = 8):
-        self.path = os.path.join(RUN, "download_budget.json")
-        self.limit = limit
+    def __init__(self, limit: int = None):
+        # FT_BUDGET_FILE / FT_BUDGET_LIMIT: separate budget for re-runs (decisions task: A2 ≤ 4 samples)
+        self.path = os.path.join(RUN, os.environ.get("FT_BUDGET_FILE", "download_budget.json"))
+        self.limit = limit if limit is not None else int(os.environ.get("FT_BUDGET_LIMIT", "8"))
 
     def used(self) -> list:
         if not os.path.exists(self.path):

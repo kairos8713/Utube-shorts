@@ -2,6 +2,7 @@
 qwen_specialized.py — the two content tasks left for Qwen:
 
   score_clips()   — find ~20–28 s viral moments in a segment transcript (final bounds: clip_bounds.py)
+  rank_clips()    — rank ALL candidates of one video against each other, 1–100 each, no ties
   write_caption() — 1–2 sentence comment + 3–5 niche hashtags
 
 The hook / insight / infobox / outro / YouTube-title prompts were removed with
@@ -22,7 +23,7 @@ from prompt_safety import data_block, system_prompt
 log = get_logger("qwen")
 
 RAW_LENGTH_TOL_S = 3.0      # Qwen's raw times may be off by a few s; clip_bounds enforces 18–32 s
-MIN_VIDEO_SCORE = 7
+MIN_VIDEO_SCORE = 60           # 1–100 scale (was 7 on 0–9; every clip scored 9 in the full test)
 CAPTION_SIMILARITY_MAX = 0.75
 IG_CAPTION_MAX = 2200
 
@@ -44,14 +45,15 @@ def _to_seconds(v) -> Optional[float]:
 # clip scoring
 # ═════════════════════════════════════════════════════════════════════════════
 
-_SCORE_SPEC = """{"clips": [{"start": "mm:ss", "end": "mm:ss", "score": 0-9 integer,
+_SCORE_SPEC = """{"clips": [{"start": "mm:ss", "end": "mm:ss", "score": 1-100 integer,
   "topic": "<3-6 words>", "reason": "<max 20 words>", "time_sensitive": true|false}]}
 Up to 4 clips, each about 20-28 seconds long, not overlapping. Start where a sentence starts and
-end where a sentence ends."""
+end where a sentence ends. No two clips may have the same score."""
 
 _SCORE_ROLE = """You select the most engaging 20-28 second moments from a long-form video
-transcript for Instagram Reels. Score 0-9: 0-6 boring/filler/intro (do not return),
-7 interesting, 8 surprising or high-energy, 9 top 1% (shocking, hilarious, unforgettable).
+transcript for Instagram Reels. Score 1-100 and use the whole range: below 60 boring/filler/intro
+(do not return), 60-74 interesting, 75-89 surprising or high-energy, 90-100 only for a top 1% moment
+(shocking, hilarious, unforgettable). Different clips must get different scores.
 A clip must make sense on its own without the rest of the video: begin at the start of a
 sentence and stop after a complete sentence, never mid-sentence. Mark time_sensitive=true
 only for news / current events that lose value within days."""
@@ -69,8 +71,11 @@ def validate_scores(obj: dict) -> List[str]:
         if _to_seconds(c.get("start")) is None or _to_seconds(c.get("end")) is None:
             errs.append(f"clip {i} missing start/end")
         sc = c.get("score")
-        if not isinstance(sc, int) or not 0 <= sc <= 9:
-            errs.append(f"clip {i} score must be an integer 0-9")
+        if not isinstance(sc, int) or not 1 <= sc <= 100:
+            errs.append(f"clip {i} score must be an integer 1-100")
+    scores = [c.get("score") for c in clips[:8] if isinstance(c, dict)]
+    if len(scores) != len(set(scores)):
+        errs.append("every clip needs a different score")
     return errs
 
 
@@ -118,6 +123,47 @@ def filter_clips(raw: list, segment_duration: float, min_score: int = MIN_VIDEO_
                     "topic": str(c.get("topic") or "")[:80], "reason": str(c.get("reason") or "")[:200],
                     "time_sensitive": bool(c.get("time_sensitive"))})
     return out
+
+
+_RANK_ROLE = """You rank candidate Instagram Reels clips cut from ONE long-form video against each
+other: which would hold a viewer best on its own? Order ALL candidates from best to worst and give each
+a score 1-100 that reflects the ranking: strictly decreasing, no two scores equal, and spread out (the
+best 85-100, a clearly weaker one at least 10 points lower; a merely interesting one 60-74)."""
+_RANK_SPEC = '{"ranking": [{"id": "<candidate id>", "score": <1-100>}, ...]}   // every id exactly once, best first'
+
+
+def validate_ranking(obj: dict, ids: List[str]) -> List[str]:
+    r = obj.get("ranking")
+    if not isinstance(r, list) or not all(isinstance(x, dict) for x in r):
+        return ["'ranking' must be a list of objects"]
+    got = [str(x.get("id")) for x in r]
+    errs = []
+    if sorted(got) != sorted(ids):
+        errs.append(f"rank every id exactly once: {ids}")
+    scores = [x.get("score") for x in r]
+    if not all(isinstance(v, int) and 1 <= v <= 100 for v in scores):
+        errs.append("scores must be integers 1-100")
+    elif any(b >= a for a, b in zip(scores, scores[1:])):
+        errs.append("scores must be strictly decreasing from best to worst (no ties)")
+    return errs
+
+
+def rank_clips(candidates: List[dict], niche: str, llm=None) -> Optional[List[dict]]:
+    """candidates: [{"id", "topic", "reason", "text"}] → [{"id", "score"}] best first, or None (keep the
+    per-segment scores) when the model fails."""
+    llm = llm or get_llm()
+    ids = [str(c["id"]) for c in candidates]
+    listing = "\n\n".join(f"[{c['id']}] {c.get('topic') or ''} — {c.get('reason') or ''}\n{(c.get('text') or '')[:600]}"
+                            for c in candidates)
+    msgs = [{"role": "system", "content": system_prompt(_RANK_ROLE, _RANK_SPEC)},
+            {"role": "user", "content": f"NICHE: {niche}\n\n" + data_block("CANDIDATES", listing, 9000)
+             + "\nRank all candidates."}]
+    try:
+        obj = llm.chat_json(msgs, task="clip_ranking", validator=lambda o: validate_ranking(o, ids), max_tokens=400)
+    except LLMBadOutput as e:
+        log.warning("clip ranking failed, keeping segment scores: %s", e)
+        return None
+    return [{"id": str(x["id"]), "score": int(x["score"])} for x in obj["ranking"]]
 
 
 # ═════════════════════════════════════════════════════════════════════════════

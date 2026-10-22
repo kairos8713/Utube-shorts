@@ -97,6 +97,21 @@ _SPEC = {
     "YTDLP_UPDATE_CHANNEL":  (str, "stable"),         # stable | nightly (pip --pre)
     "POT_PROVIDER_URL":      (str, ""),               # bgutil HTTP server; empty = default 127.0.0.1:4416
     "OLLAMA_EXE":            (str, ""),               # empty → %LOCALAPPDATA%\Programs\Ollama\ollama.exe
+    # ── source selection (source_rules.py) — editable exclusion list ─────────
+    # channel ids: TED, TEDx Talks, TED-Ed, Bloomberg Television (ids as YouTube reports them)
+    "SOURCE_EXCLUDE_CHANNEL_IDS": (str, "UCAuUUnT6oDeKwE6v1NGQxug,UCsT0YIqwnpJCM-mx7-gSA4Q,"
+                                        "UCsooa4yRKGN_zEE8iknghZA,UCIALMKvObZNtJ6AmdCLP7Lg"),
+    # regexes separated by ";;", matched case-insensitively against channel title and handle
+    "SOURCE_EXCLUDE_NAME_PATTERNS": (str, ";;".join([
+        r"(?-i:\bTED(x|-Ed)?\b)",                                                    # CC BY-NC-ND
+        r"\b(Bloomberg|CNN|BBC|CNBC|MSNBC|Fox News|Sky News|NBC News|ABC News|CBS News|Al Jazeera|Reuters|"
+        r"Associated Press|Euronews|DW News|France 24|PBS NewsHour|Yahoo Finance|Wall Street Journal|WSJ|"
+        r"Financial Times|Business Insider)\b|\bTelevision\b|\bNews\b",              # news / TV
+        r"\b(Warner Bros\.?|Universal Pictures|Sony Pictures|Paramount Pictures|Netflix|Disney|Pixar|"
+        r"Marvel Entertainment|HBO|Lionsgate|20th Century Studios|A24|DreamWorks|Prime Video|Apple TV)\b",  # studios
+        r"VEVO\b|\s-\sTopic$|\b(Records|Recordings|Music Group|Universal Music|Sony Music|Warner Music|"
+        r"Atlantic Records|Columbia Records|Interscope|Def Jam|Republic Records|Capitol Records)\b",  # labels
+    ])),
     # ── scheduling ──────────────────────────────────────────────────────────
     "POSTING_WINDOW_START":  (str, "15:00"),          # Europe/Warsaw local time
     "POSTING_WINDOW_END":    (str, "05:00"),
