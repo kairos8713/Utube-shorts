@@ -215,3 +215,65 @@ PUBLISH_LIMIT; 368 / subcode 2207051 / "spam"/"blocked"/"restricted" → ACTION_
 - **Karar:** `publish_item` stamps container/publish times as `now + elapsed wall time` instead of
   `max(now, utcnow())`. Found because a test started failing once the real date passed the test's
   fixed `NOW`; the old form mixed two clocks.
+
+## D-029 Full test (2026-10-22): niches, download budget, order
+- **Karar:** The DB copy has a single sector (`IG_deneme31316969`, the real test account's). The 4 test
+  niches come from the original project's sector set (bg_music folders) with clean names for prompts:
+  Podcast, Personal Finance, Tech / AI, Psychology (music_slug → the `*_riskli` folders).
+- **Karar:** YouTube budget 8 downloads = 1 (1c probe) + 3 speech samples in A (max 1 per niche; the
+  4th niche's candidates stay CANDIDATE with reason "sample skipped: budget") + 4 source videos in C
+  (1 per niche, up to 3 clips each = 12 reels). Discovery runs with 3 candidates per niche (not the
+  production 5/10) to stay polite. The production `plan_production` would pick ~3 videos per niche for a
+  2-cycle buffer; the harness limits it to 1.
+- **Karar:** 1e (model comparison) runs after A, using A's real Whisper sample transcripts as inputs,
+  so no extra download is needed. A itself runs with qwen3:32b (current default).
+
+## D-030 Model: qwen3.8:27b, OLLAMA_NUM_GPU=99, OLLAMA_NUM_CTX=12288 (full test 1e, 2026-10-22)
+Same inputs for both models (2 real Whisper samples from step A + 10 comments incl. 2 injections):
+
+| | qwen3:32b (auto) | qwen3.8:27b (num_gpu 99) |
+|---|---|---|
+| `ollama ps` ctx 6144 | 100 % GPU, 21 GB | 100 % GPU, 17 GB (auto placement: 6 %/94 % CPU/GPU) |
+| `ollama ps` ctx 8192 | **4 %/96 % CPU/GPU** | 100 % GPU |
+| ctx 10240 / 12288 | — | 100 % GPU; ~2.7 GB free per card at 12288 |
+| think leakage | none | none (`think:false` works) |
+| JSON first-try | 18/19 (1 retry) | 19/19 |
+| avg / max call | 6.1 s / 45 s | 5.7 s / 38 s |
+| generation | 11.3 tok/s | 18.9 tok/s |
+| clips found | 2 (PF) + **0** (Psychology) | 3 (PF) + 2 (Psychology) |
+| episode-title question | **invented a title** | "I don't have the title…" |
+| Turkish comment | English, off-topic | answered in Turkish |
+
+- **Karar:** qwen3.8:27b with `OLLAMA_NUM_GPU=99` (Ollama alone leaves 6 % on CPU) and
+  `OLLAMA_NUM_CTX=12288` (largest tested value that stays 100 % on GPU; KV cache adds only ~130 MB/card
+  from 6144→12288). Clip-scoring prompts peak at ~2.4k tokens, so nothing was truncated at any setting.
+- **Gerekçe:** better grounding (no invented facts), more clips found, 1.7× faster generation, 0 JSON retries.
+- **Alternatif:** qwen3:32b at 6144 (works, slower, hallucinated once).
+
+## D-031 Full test: what deviated from the plan and why
+- **A harness bug:** the speech-sample budget was capped per niche but not to 3 in total, so A took 4
+  samples. With the 8-download limit kept, C had 3 source videos instead of 4. One of them (TEDx,
+  Psychology) got a 403 PO-token error → **6 reels instead of 12**. No extra downloads were made to make
+  up for it (the 8-video limit is a test rule); the remaining steps ran on these 6 reels.
+- **Order:** 1e after A (uses A's real Whisper samples), B after D/E (B-priority needs the scheduled
+  queue snapshot and a rendered reel to reuse, since the download budget was spent).
+- **Panel test port:** 5071 (5061 is on Chromium's unsafe-port list → Playwright `ERR_UNSAFE_PORT`).
+- **Real DB:** the SQLite backup API read at setup opened the WAL-mode DB, which left empty
+  `automation.db-wal` (0 bytes) / `-shm` files; no write (hash unchanged). Removed in J.
+
+## D-032 Scheduler vs. rolling 24 h cap — only the publisher deferral fixed
+- **Bulgu:** `schedule_account` limits posts per Warsaw window-day; `guardrails.can_publish` counts a
+  rolling 24 h. Posts planned on consecutive days < 24 h apart are deferred at publish time (step D/E:
+  3 of 6 planned slots were < 24 h after the account's previous post).
+- **Karar (bug, fixed in d458134):** a DEFER_CAP moved the item to the NEXT day's window start (a whole
+  day lost, landing on that day's planned post → cascade). It now waits until the rolling cap frees up
+  (`guardrails.cap_frees_at`), inside the window, else the next window start. E: 4/6 → 6/6 published.
+- **Not changed (design, reported):** making the scheduler itself respect the rolling 24 h was tried and
+  reverted: with "random minute inside the slot" posts drift later every day and whole days get skipped
+  (8 days → 6 posts in the existing test). Choosing between plan-accuracy, randomness and throughput is
+  Emre's call — see FULL_TEST_REPORT "Sadece rapor".
+
+## D-033 20-account projection fits → qwen3:30b-a3b test skipped
+- C measured ~219 s of machine time per reel (download+Whisper+Qwen+render+RIFE+QC). 60 reels per 3-day
+  cycle ≈ 4–6.5 h of GPU work per 72 h (depending on source length), so the "doesn't fit" condition for
+  trying qwen3:30b-a3b was not met; no model pull was made.
