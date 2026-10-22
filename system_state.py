@@ -64,9 +64,36 @@ def heartbeat(service: str, session=None):
     put(f"heartbeat:{service}", utcnow().isoformat(), session)
 
 
-def register_service(service: str, session=None):
-    """Called once at service start: PID for the watchdog + first heartbeat."""
+_instance_locks = {}
+
+
+def single_instance(service: str):
+    """Exit at once if another process already runs this service. The watchdog judges services by their DB
+    heartbeat, which is stale right after boot (last session's), so its first tick can start a second copy
+    of a service that is itself still starting. The lock (WORK_DIR/locks) is held for the process lifetime
+    and released by the OS when the process dies."""
     import os
+    import sys
+    from filelock import FileLock, Timeout
+    from config import settings
+    if service in _instance_locks:
+        return
+    path = os.path.join(settings.WORK_DIR, "locks", f"{service}.lock")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    lock = FileLock(path)
+    try:
+        lock.acquire(timeout=0)
+    except Timeout:
+        from log_setup import get_logger
+        get_logger("system").warning("%s already running (pid %s) — this copy exits", service, get(f"pid:{service}"))
+        sys.exit(0)
+    _instance_locks[service] = lock
+
+
+def register_service(service: str, session=None):
+    """Called once at service start: single-instance check, PID for the watchdog + first heartbeat."""
+    import os
+    single_instance(service)
     put(f"pid:{service}", str(os.getpid()), session)
     heartbeat(service, session)
 
