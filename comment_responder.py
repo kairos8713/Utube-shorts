@@ -168,7 +168,8 @@ Never speak for them in the first person ("I", "we", "our", "my wife"): refer to
 person ("he says...", "the guest argues...", "they explain..."). Write ONE short natural sentence
 (max 120 characters) using only what is in the clip transcript, caption and SOURCE block.
 If someone asks which episode / video this is, name it from SOURCE: "It's from 'TITLE' on CHANNEL's
-channel" (add the date if it helps).
+channel" (add the date if it helps). Always write the channel by its name exactly as in SOURCE, never as
+an @handle (on Instagram an @ tags and notifies a stranger).
 If the answer is NOT in the clip or the SOURCE block (a name, a book, a number, what happened next),
 do not write a reply: return {"reply": null, "skip_reason": "<why>"}. Never answer "the clip doesn't
 say / mention / specify ...".
@@ -210,9 +211,27 @@ def reply_problems(reply: str, context_text: str, previous: list, titles=()) -> 
     nums = re.findall(r"\d[\d.,]*", r)
     if any(n.strip(".,") not in (context_text or "") for n in nums):
         errs.append("numbers not present in the clip")
-    if any(caption_similarity(r, p) >= REPLY_SIMILARITY_MAX for p in previous):
+    names_episode = any(title_in(t, r) for t in titles)     # episode answers repeat by nature
+    if not names_episode and any(caption_similarity(r, p) >= REPLY_SIMILARITY_MAX for p in previous):
         errs.append("too similar to an earlier reply")
     return errs
+
+
+def _norm_title(t: str) -> str:
+    t = (t or "").lower().translate({0x2019: "'", 0x2018: "'", 0x201c: '"', 0x201d: '"', 0x2026: ""})
+    return re.sub(r"\s+", " ", t).strip(" .'\"")
+
+
+def title_in(title: str, text: str) -> bool:
+    nt = _norm_title(title)
+    return len(nt) >= 4 and nt in _norm_title(text)
+
+
+def episode_named_on_post(session, post_id: int, title: str) -> bool:
+    """Has this post already had a reply naming the episode?"""
+    rows = (session.query(CommentReply.text).join(Comment, Comment.id == CommentReply.comment_id)
+            .filter(Comment.post_id == post_id).all())
+    return any(title_in(title, t or "") for (t,) in rows)
 
 
 def source_info(session, post, vid) -> str:
@@ -220,8 +239,8 @@ def source_info(session, post, vid) -> str:
     from models import Source
     src = session.get(Source, post.source_id) if post.source_id else None
     parts = []
-    if src is not None:
-        parts.append(f"Source channel on YouTube: {src.title or '?'}" + (f" (@{src.handle})" if src.handle else ""))
+    if src is not None:      # display name only: an "@handle" here invites the model to tag someone
+        parts.append(f"Source channel on YouTube: {src.title or (src.handle or '?').lstrip('@')}")
     parts.append("The people speaking in the clip are from that channel; this account only shares the clip.")
     if vid.source_title:
         when = f", published {vid.source_published_at:%Y-%m-%d}" if vid.source_published_at else ""
@@ -267,6 +286,9 @@ def write_reply(session, comment, llm=None):
     text = obj["reply"].strip()
     if NOT_IN_CLIP_RE.search(text.replace("\u2019", "'")):
         return None, f"skipped: non-answer / 'not in the clip' correction: {text[:120]}"
+    if vid.source_title and title_in(vid.source_title, text) and \
+            episode_named_on_post(session, post.id, vid.source_title):
+        return None, "skipped: the episode name was already given under this post"
     return text, None
 
 

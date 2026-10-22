@@ -66,10 +66,12 @@ def test_watchdog_logs_and_alerts_an_ollama_restart(db, monkeypatch):
     assert alert.severity == "WARNING"
 
 
-def test_credit_line_ends_with_on_youtube_and_keeps_the_handle():
+def test_credit_line_ends_with_on_youtube_and_never_tags():
     import qwen_specialized as q
-    cap = q.compose_caption("A sharp line.", ["#a1", "#b2", "#c3"], "JayShettyPodcast.")
-    assert cap.splitlines()[-1] == "🎥 @JayShettyPodcast. on YouTube"
+    cap = q.compose_caption("A sharp line.", ["#a1", "#b2", "#c3"], "JayShettyPodcast.", "Jay Shetty Podcast")
+    assert cap.splitlines()[-1] == "🎥 Jay Shetty Podcast on YouTube" and "@" not in cap
+    assert q.credit_line("JayShettyPodcast.", "") == "🎥 JayShettyPodcast. on YouTube"         # no name → bare handle
+    assert q.credit_line("", "") == "🎥 original creator on YouTube"
     assert q.compose_caption("x", ["#a1", "#b2", "#c3"], "", "Some Show").splitlines()[-1] == "🎥 Some Show on YouTube"
 
 

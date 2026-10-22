@@ -54,7 +54,7 @@ def test_validate_caption_rules():
 
 def test_compose_caption_credit_is_last_line():
     cap = q.compose_caption("Nice point.", ["#a1", "#b2", "#c3"], "@Real.Source")
-    assert cap.splitlines()[-1] == "🎥 @Real.Source on YouTube"
+    assert cap.splitlines()[-1] == "🎥 Real.Source on YouTube"                  # handle without "@"
     assert "#a1 #b2 #c3" in cap
 
 
@@ -82,3 +82,16 @@ def test_score_prompt_wraps_transcript_as_data():
 def test_similarity():
     assert q.too_similar("Hard to argue with this", ["hard to argue with this!"])
     assert not q.too_similar("Totally new thought", ["hard to argue with this"])
+
+
+
+def test_caption_and_hashtags_never_contain_at():
+    ok = {"comment": "A sharp observation about money habits.", "hashtags": ["#money", "#mindset", "#finance"]}
+    assert q.validate_caption(ok) == []
+    for bad in ({**ok, "comment": "Great point from moneyguy@ on fees."},
+                {**ok, "comment": "Totally agree with @someone here today."},
+                {**ok, "hashtags": ["#money", "@moneyguy", "#finance"]},
+                {**ok, "hashtags": ["#money", "#money@guy", "#finance"]}):
+        assert any("@" in e for e in q.validate_caption(bad)), bad
+    cap = q.compose_caption(ok["comment"], ok["hashtags"], "MoneyGuyShow", "The Money Guy Show")
+    assert "@" not in cap and cap.endswith("🎥 The Money Guy Show on YouTube")

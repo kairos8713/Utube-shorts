@@ -372,3 +372,13 @@ Same inputs for both models (2 real Whisper samples from step A + 10 comments in
   title out of its checks (titles contain full stops and words like "We're"). Skips are logged as
   `SKIPPED: …` in the decision log (rule failures stay `REJECTED: …`). The reply similarity threshold is
   unchanged, so a second identical episode question on the same account gets no reply (reported).
+
+## D-041 No "@" on Instagram; episode name once per post (Emre, 2026-10-23)
+- **Kural (Emre):** caption credit `🎥 <channel display name> on YouTube` (no name → handle without "@"), because
+  on Instagram "@x" becomes a clickable tag that notifies whoever owns x there; the credit burnt into the video
+  (not clickable) stays `@handle`. Comment replies keep the @mention ban; SOURCE shows the display name only.
+  The caption validator rejects any "@" in the comment and in hashtags. Replies naming the episode (they contain
+  the source title) skip the similarity check, but only once per post — a later episode question on the same
+  post is SKIPPED. Supersedes the credit format of D-039.
+- **Karar (details):** "names the episode" = the normalized source title (quotes/apostrophes unified, case
+  ignored) occurs in the reply; a shortened title does not count and stays under the similarity check.

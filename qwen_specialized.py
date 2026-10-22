@@ -193,8 +193,8 @@ def validate_caption(obj: dict) -> List[str]:
             errs.append("comment must be at most 2 sentences")
         if URL_RE.search(comment):
             errs.append("no links allowed")
-        if MENTION_RE.search(comment):
-            errs.append("no @mentions allowed")
+        if "@" in comment:
+            errs.append("no @ allowed (Instagram turns @name into a tag and notifies that user)")
         if FOLLOW_RE.search(comment):
             errs.append("no follow/subscribe calls")
         if "#" in comment:
@@ -204,7 +204,9 @@ def validate_caption(obj: dict) -> List[str]:
         errs.append("hashtags must be a list of 3-5 items")
     else:
         for t in tags:
-            if not isinstance(t, str) or not HASHTAG_RE.match(t):
+            if isinstance(t, str) and "@" in t:
+                errs.append(f"no @ in hashtags: {t!r}")
+            elif not isinstance(t, str) or not HASHTAG_RE.match(t):
                 errs.append(f"bad hashtag {t!r}")
             elif t.lower() in _BANNED_TAGS:
                 errs.append(f"hashtag {t} not allowed")
@@ -225,10 +227,17 @@ def too_similar(comment: str, previous: List[str], threshold: float = CAPTION_SI
     return any(caption_similarity(comment, p) >= threshold for p in previous or [])
 
 
+def credit_line(source_handle: str, source_name: str = "") -> str:
+    """"🎥 <channel display name> on YouTube" — never with "@": on Instagram "@x" becomes a clickable tag that
+    notifies whoever owns x there (often not the YouTube creator). No name → the handle without "@"."""
+    name = (source_name or "").replace("@", "").strip()
+    handle = re.sub(r"[^A-Za-z0-9._]", "", (source_handle or "").replace("@", ""))
+    return f"🎥 {name or handle or 'original creator'} on YouTube"
+
+
 def compose_caption(comment: str, hashtags: List[str], source_handle: str, source_name: str = "") -> str:
-    handle = re.sub(r"[^A-Za-z0-9._]", "", (source_handle or "").lstrip("@"))
-    credit = (f"🎥 @{handle}" if handle else f"🎥 {source_name.strip() or 'original creator'}") + " on YouTube"
-    caption = f"{comment.strip()}\n\n{' '.join(hashtags)}\n{credit}"
+    caption = f"{comment.strip()}\n\n{' '.join(hashtags)}\n{credit_line(source_handle, source_name)}"
+    assert "@" not in caption, "caption must not contain @"     # validate_caption already rejects it
     return caption[:IG_CAPTION_MAX]
 
 

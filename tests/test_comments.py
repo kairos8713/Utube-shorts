@@ -189,7 +189,8 @@ def test_reply_prompt_carries_source_block_and_retries_once(db, setup):
     assert len(t.calls) == 2                                                          # first try + 1 retry
     msgs = t.calls[0][2]["messages"]
     assert "CURATOR" in msgs[0]["content"]
-    assert "<<<DATA SOURCE" in msgs[1]["content"] and "The Money Guy Show (@MoneyGuyShow)" in msgs[1]["content"]
+    assert "<<<DATA SOURCE" in msgs[1]["content"] and "Source channel on YouTube: The Money Guy Show" in msgs[1]["content"]
+    assert "@MoneyGuyShow" not in msgs[1]["content"]                     # display name only, nothing to tag
 
 
 
@@ -280,3 +281,49 @@ def test_agreeing_discussion_reply_is_kept_and_skips_are_logged(db, setup):
     assert cr.decide(db, c2, NOW, random.Random(1), llm=client2, client_factory=lambda acc: ig) == "IGNORED"   # 0.13 < 0.8 → tries a reply
     d = db.query(Decision).filter(Decision.task == "comment_reply").order_by(Decision.id.desc()).first()
     assert d.validation.startswith("SKIPPED")
+
+
+
+# ── 3rd decision on replies: episode answers once per post, no @ anywhere ──
+
+TITLE = "We're Financial Advisors. This Internet Advice Is WILD."
+
+
+def test_episode_answers_skip_the_similarity_check():
+    a = "It's from 'We’re Financial Advisors. This Internet Advice Is WILD.' on The Money Guy Show's channel."
+    assert cr.reply_problems(a, "", [a], titles=(TITLE,)) == []                 # same answer again is fine…
+    assert "too similar to an earlier reply" in cr.reply_problems("Totally agree with that", "",
+                                                                  ["totally agree with that!"], titles=(TITLE,))
+
+
+def test_episode_name_given_once_per_post(db, setup):
+    from fakes import FakeIG  # noqa: F401
+    from helpers import post as make_post, video as make_video
+    from test_llm import chat_reply, make
+    a, p, ig = _reply_setup(db, setup)
+    ans = "It's from 'We’re Financial Advisors. This Internet Advice Is WILD.' on The Money Guy Show's channel."
+    c1 = _comment(db, a, p, "What's the episode called?")
+    client, _ = make([chat_reply('{"reply": "%s"}' % ans)])
+    text, err = cr.write_reply(db, c1, llm=client)
+    assert text == ans
+    db.add(CommentReply(comment_id=c1.id, owned_channel_id=a.id, text=text, scheduled_for=NOW, status="SCHEDULED",
+                        created_at=NOW))
+    db.commit()
+    c2 = _comment(db, a, p, "Bu bölümün adı ne?")
+    client2, t2 = make([chat_reply('{"reply": "%s"}' % ans)] * 2)
+    assert cr.write_reply(db, c2, llm=client2) == (None, "skipped: the episode name was already given under this post")
+    assert len(t2.calls) == 1
+    # another post of the same episode: allowed again (similarity no longer blocks it)
+    v2 = make_video(db, a, url="other-clip")
+    v2.source_title = TITLE
+    p2 = make_post(db, a, v2, published_at=NOW - dt.timedelta(hours=2))
+    p2.source_id = p.source_id
+    db.commit()
+    c3 = _comment(db, a, p2, "Which episode?")
+    client3, _ = make([chat_reply('{"reply": "%s"}' % ans)])
+    assert cr.write_reply(db, c3, llm=client3) == (ans, None)
+
+
+def test_reply_prompt_asks_for_the_channel_name_not_a_handle():
+    assert "never as" in cr._REPLY_ROLE and "@handle" in cr._REPLY_ROLE
+    assert cr.reply_problems("It's from their show on @MoneyGuyShow", "", [])            # @ still banned

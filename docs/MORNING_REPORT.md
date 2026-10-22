@@ -49,7 +49,7 @@ e-postaya, R2'ye hiçbir istek gitmedi.
 | Kutu/panel/buton yok | üst/alt bölge keskinliği 0.3 (sadece bulanık arka plan) ✅ |
 | Altyazı güvenli alanda | y≈1290–1420 bandında ✅ (gözle de kontrol edildi) |
 | Kredi görünür | "@E2E_Source" x=60, y=590 ✅ |
-| Caption | "Hard to argue with this once you hear the numbers behind it." + 3 hashtag + `🎥 @E2E_Source` |
+| Caption | "Hard to argue with this once you hear the numbers behind it." + 3 hashtag + `🎥 @E2E_Source` (o zamanki biçim; artık `🎥 <Kanal adı> on YouTube`, D-041) |
 
 Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_middle.png`,
 `frame_end.png`, `reel.mp4`, `e2e_result.json`, `logs/outbox/`). Gerçek YouTube indirmesi denendi; **HTTP 403** (aşağıda) yüzünden sentetik video
@@ -164,7 +164,8 @@ Kareler ve tam sonuç: `logs/e2e/20261018T235254Z/` (`frame_0.5s.png`, `frame_mi
 - D-008 `legacy_runner.py` → `downloader.py`, `transcriber.py`, `media_utils.py`; eskisi arşivde.
 - D-011 Ollama/GGUF yok → mock; VRAM notu.
 - D-012 Tek global GPU kilidi; Whisper/Qwen aşama boyu, render klip başına.
-- D-013 Caption'ı kod birleştiriyor; `🎥 @kaynak` satırını model değil kod ekliyor.
+- D-013 Caption'ı kod birleştiriyor; kredi satırını model değil kod ekliyor. 2026-10-23'ten beri (D-041)
+  `🎥 <Kanal adı> on YouTube` — "@" yok (Instagram'da @ etiketler ve bildirim gönderir); videodaki kredi `@handle`.
 - D-015 Günlük limitler kayan 24 saat.
 - D-016 WARMUP→ACTIVE sadece ısınma kapısıyla; duraklatılmış hesabı sadece panel açar.
 - D-017 pHash: kaynak klipten 4 kare, hepsi eşleşirse kopya.
