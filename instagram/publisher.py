@@ -333,7 +333,7 @@ def _handle_failure(session, acc, item, video, post, e: IGError, now) -> str:
     log.error("publish failed account=%s video=%s: %s", acc.id, video.id, msg)
     if e.kind in PAUSE_KINDS:
         session.commit()
-        pause_account(session, acc, f"{e.kind}: {msg}", now)
+        pause_account(session, acc, msg if msg.startswith(f"{e.kind}:") else f"{e.kind}: {msg}", now)
         return "PAUSED"
     if e.kind == PUBLISH_LIMIT:
         post.status = "SKIPPED"

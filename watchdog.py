@@ -126,6 +126,9 @@ def check_ollama(session, now=None, health=None, starter=None) -> str:
         starter()
         time.sleep(wait_s)
         if health():
+            log.warning("Ollama was not responding — restarted (%s)", settings.OLLAMA_URL)
+            raise_alert("OLLAMA_RESTARTED", f"Ollama ({settings.OLLAMA_URL}) was not responding and was restarted "
+                        "by the watchdog", severity="WARNING", session=session)
             return "restarted"
     except Exception as e:
         log.error("ollama start failed: %s", e)

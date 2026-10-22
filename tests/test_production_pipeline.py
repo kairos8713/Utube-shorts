@@ -75,7 +75,7 @@ def test_stage_order_is_strict(tmp_path):
     assert kinds.index("whisper_unload") < kinds.index("llm")
     assert kinds.index("llm_unload") < kinds.index("render")
     cand = res.produced[0]
-    assert cand.abs_start == 210.0 and cand.caption["caption"].endswith("🎥 @Src")
+    assert cand.abs_start == 210.0 and cand.caption["caption"].endswith("🎥 @Src on YouTube")
     assert (cand.start, cand.end) == (30.0, 54.15)        # Qwen's 30–52 s → end of the sentence at 53.9 + 0.25
     assert cand.words and cand.words[0]["start"] >= 0
 

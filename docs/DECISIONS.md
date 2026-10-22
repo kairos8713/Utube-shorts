@@ -348,3 +348,14 @@ Same inputs for both models (2 real Whisper samples from step A + 10 comments in
 - **Ölçüm:** A2 (qwen3.8:27b, 4 ses örneği): TED dışlama listesiyle, "Too Late Now" Qwen'le
   (reaction_compilation) elendi; doygunluk 1–7 kanal ölçüldü (eskiden hep 0); izin her kaynakta "bilinmiyor".
   Gerçek transkriptte sıralama: 10 aday 98→48, tekrar eden puan 0.
+
+## D-039 Small fixes from the full test (Emre's decision #6, 2026-10-23)
+- `pause_reason` no longer doubles the error kind ("AUTH: AUTH: …"); `COPYRIGHT_MATCH` e-mails; a watchdog
+  restart of Ollama writes a log line + `OLLAMA_RESTARTED` WARNING alert (not an e-mail kind).
+- Credit line: the handle is kept exactly and the line ends with " on YouTube"
+  (`🎥 @JayShettyPodcast. on YouTube`), also for the name fallback.
+- `scripts/stop_services.ps1`: stops running Reels-* scheduled tasks (Stop-ScheduledTask, never removes them)
+  and kills every repo service process with its whole child tree via ParentProcessId (the .venv python.exe is
+  a launcher with the real interpreter as child), watchdog first; Ollama is not touched. Pure PowerShell —
+  no taskkill (this machine's sessions may lack System32 in PATH); `-DryRun` lists only. Live-tested with a
+  dummy 3-process tree: all stopped, exit 0, other processes untouched.

@@ -54,7 +54,7 @@ def test_validate_caption_rules():
 
 def test_compose_caption_credit_is_last_line():
     cap = q.compose_caption("Nice point.", ["#a1", "#b2", "#c3"], "@Real.Source")
-    assert cap.splitlines()[-1] == "🎥 @Real.Source"
+    assert cap.splitlines()[-1] == "🎥 @Real.Source on YouTube"
     assert "#a1 #b2 #c3" in cap
 
 

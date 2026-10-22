@@ -227,7 +227,7 @@ def too_similar(comment: str, previous: List[str], threshold: float = CAPTION_SI
 
 def compose_caption(comment: str, hashtags: List[str], source_handle: str, source_name: str = "") -> str:
     handle = re.sub(r"[^A-Za-z0-9._]", "", (source_handle or "").lstrip("@"))
-    credit = f"🎥 @{handle}" if handle else f"🎥 {source_name.strip() or 'original creator'}"
+    credit = (f"🎥 @{handle}" if handle else f"🎥 {source_name.strip() or 'original creator'}") + " on YouTube"
     caption = f"{comment.strip()}\n\n{' '.join(hashtags)}\n{credit}"
     return caption[:IG_CAPTION_MAX]
 
