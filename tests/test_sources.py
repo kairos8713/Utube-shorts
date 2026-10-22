@@ -179,3 +179,43 @@ def test_fast_lane_new_upload_gets_priority(db, llm):
     first = db.query(UploadQueue).filter_by(owned_channel_id=a.id).order_by(UploadQueue.scheduled_for).first()
     v = db.get(videos, first.video_id)
     assert v.source_url.endswith("e2") and v.time_sensitive and first.priority == 1
+
+
+# ── handle from channel metadata (search results only carry /channel/UC... URLs) ──
+
+def test_meta_handle_variants():
+    assert sm.meta_handle({"uploader_id": "@JayShettyPodcast."}) == "JayShettyPodcast."
+    assert sm.meta_handle({"uploader_id": None, "uploader_url": "https://www.youtube.com/@Money.Guy"}) == "Money.Guy"
+    assert sm.meta_handle({"uploader_id": "UCabc"}) == ""
+
+
+class ChannelIdYT(FakeYT):
+    """Search returns /channel/UC... URLs like real ytsearch; the handle only exists in channel metadata."""
+
+    def __init__(self):
+        super().__init__()
+        self.lang = {"https://www.youtube.com/channel/UCgoodpod0001": "en"}
+
+    def channel_videos(self, url, n=15):
+        meta = super().channel_videos(url, n)
+        meta["uploader_id"] = "@Good.Pod."
+        return meta
+
+
+def test_discovery_stores_handle_from_metadata(db, llm):
+    sec = sector(db, "Podcast")
+    sm.discover_niche(db, sec, ChannelIdYT(), llm)
+    src = db.query(Source).filter_by(channel_url="https://www.youtube.com/channel/UCgoodpod0001").one()
+    assert src.status == "TRIAL" and src.handle == "Good.Pod."
+
+
+def test_plan_production_backfills_missing_handle(db):
+    sec = sector(db)
+    src = source(db, url="https://www.youtube.com/channel/UCgoodpod0001", status="ACTIVE", title="Good Pod")
+    src.handle = ""
+    db.commit()
+    yt = ChannelIdYT()
+    yt.uploads[src.channel_url] = ["v1"]
+    plan = sm.plan_production(db, {sec.id: 1}, NOW, yt, random.Random(1))
+    assert db.get(Source, src.id).handle == "Good.Pod."
+    assert plan and plan[0].source_handle == "Good.Pod."

@@ -111,6 +111,24 @@ def _channel_key(e: dict) -> Optional[str]:
     return url if m else None
 
 
+def meta_handle(meta: dict) -> str:
+    """'@Some.Handle.' from yt-dlp channel metadata (uploader_id / uploader_url), without the '@'.
+    Search results only carry /channel/UC... URLs, so the handle cannot come from the URL."""
+    for v in (meta.get("uploader_id"), meta.get("uploader_url")):
+        h = handle_from_url(v) if v and "/@" in str(v) else (str(v)[1:] if v and str(v).startswith("@") else "")
+        if h:
+            return h
+    return ""
+
+
+def backfill_handle(src, meta: dict):
+    if not src.handle:
+        h = meta_handle(meta)
+        if h:
+            src.handle = h
+            log.info("source %s: handle @%s from channel metadata", src.id, h)
+
+
 def channel_stats(meta: dict) -> dict:
     entries = [e for e in (meta.get("entries") or []) if e]
     durs = [e["duration"] for e in entries if e.get("duration")]
@@ -121,6 +139,7 @@ def channel_stats(meta: dict) -> dict:
         per_week = round((len(dates) - 1) / ((dates[-1] - dates[0]) / 604800.0), 2)
     return {
         "title": meta.get("channel") or meta.get("uploader") or meta.get("title"),
+        "handle": meta_handle(meta),
         "yt_channel_id": meta.get("channel_id"),
         "subscribers": meta.get("channel_follower_count"),
         "description": (meta.get("description") or "")[:2000],
@@ -248,7 +267,8 @@ def discover_niche(session, sector, yt=None, llm=None, intensify=False, max_cand
             sat = saturation(yt, stats, url)
         score = score_candidate(stats, a, speech, sat) if not reason else 0.0
         status = "TRIAL" if not reason and score >= SCORE_THRESHOLD else "REJECTED"
-        src = Source(channel_url=url, handle=handle_from_url(url), title=stats["title"], sector_id=sector.id,
+        src = Source(channel_url=url, handle=stats["handle"] or handle_from_url(url), title=stats["title"],
+                     sector_id=sector.id,
                      yt_channel_id=stats["yt_channel_id"], subscribers=stats["subscribers"],
                      avg_views=stats["avg_views"], uploads_per_week=stats["uploads_per_week"],
                      avg_duration_s=stats["avg_duration_s"], description=stats["description"],
@@ -391,6 +411,7 @@ def plan_production(session, needs: dict, now=None, yt=None, rng=None) -> List[S
         for src in {s.id: s for s in sources}.values():
             try:
                 meta = yt.channel_videos(src.channel_url, 30)
+                backfill_handle(src, meta)
             except downloader.YouTubeBlocked:
                 raise
             except downloader.DownloadError as e:
@@ -449,6 +470,7 @@ def fast_lane(session, now=None, yt=None, pipeline_factory=None, llm=None) -> di
             (src.bandit_alpha or 1) / ((src.bandit_alpha or 1) + (src.bandit_beta or 1)) >= 0.6
         try:
             meta = yt.channel_videos(src.channel_url, 3)
+            backfill_handle(src, meta)
         except downloader.YouTubeBlocked as e:
             raise_alert("YOUTUBE_BLOCKED", f"Fast lane stopped: {e}", severity="CRITICAL", session=session)
             break
