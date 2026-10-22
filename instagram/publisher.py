@@ -198,9 +198,53 @@ def publish_item(session, item: UploadQueue, now=None, client_factory=None, host
         return _mark_uncertain(session, acc, item, video, post, e)
     except IGError as e:
         return _handle_failure(session, acc, item, video, post, e, now)
+    except Exception as e:                  # anything that is not an Instagram API error
+        session.rollback()
+        return _handle_exception(session, acc, item, video, post, e, now)
     finally:
         if temp:
             host.delete_temp(temp["key"], dry_run=client.dry_run)
+
+
+def is_r2_config_error(e: Exception) -> bool:
+    """Hosting not configured or rejected credentials: an operator problem, not a clip problem."""
+    if isinstance(e, hosting.HostingNotConfigured):
+        return True
+    name = type(e).__name__
+    if name in ("NoCredentialsError", "PartialCredentialsError", "CredentialRetrievalError"):
+        return True
+    code = (getattr(e, "response", None) or {}).get("Error", {}).get("Code", "") if hasattr(e, "response") else ""
+    return code in ("InvalidAccessKeyId", "SignatureDoesNotMatch", "AccessDenied", "InvalidToken",
+                    "Unauthorized", "NoSuchBucket")
+
+
+def _handle_exception(session, acc, item, video, post, e: Exception, now) -> str:
+    msg = redact(f"{type(e).__name__}: {e}")[:500]
+    if post.status != "PENDING":
+        # container already exists → its fate is decided by reconcile_uncertain (never re-published blindly)
+        log.error("publish interrupted after container (post %s, %s): %s", post.id, post.status, msg)
+        return "INTERRUPTED"
+    post.status, post.error_message = "FAILED", msg
+    item.status = "PENDING"
+    if is_r2_config_error(e):
+        post.error_kind = "R2_NOT_CONFIGURED"
+        item.error_message = "R2 hosting not configured / credentials rejected"
+        item.scheduled_for = now + RETRY_DELAY      # no retry_count: not this clip's fault
+        session.commit()
+        raise_alert("R2_NOT_CONFIGURED", f"Video hosting (R2) unusable — nothing can be published until it is "
+                    f"fixed in .env: {msg}", severity="CRITICAL", session=session)
+        log.error("R2 not configured: %s", msg)
+        return "R2_NOT_CONFIGURED"
+    post.error_kind = "EXCEPTION"
+    item.retry_count = (item.retry_count or 0) + 1
+    item.error_message = msg
+    if item.retry_count >= MAX_ITEM_RETRIES:
+        item.status = "FAILED"
+    else:
+        item.scheduled_for = now + RETRY_DELAY
+    session.commit()                        # account.consecutive_failures deliberately untouched
+    log.error("publish failed before container (post %s): %s", post.id, msg)
+    return "RETRY_LOCAL"
 
 
 def _publish_once(client, container_id, caption):
@@ -314,7 +358,8 @@ def _handle_failure(session, acc, item, video, post, e: IGError, now) -> str:
 def reconcile_uncertain(session, now=None, client_factory=None) -> dict:
     now = now or utcnow()
     out = {"published": 0, "failed": 0, "alerted": 0, "waiting": 0}
-    posts = (session.query(Post).filter(Post.status.in_(("CONTAINER", "UNKNOWN"))).order_by(Post.id).all())
+    out["interrupted"] = 0
+    posts = (session.query(Post).filter(Post.status.in_(("PENDING", "CONTAINER", "UNKNOWN"))).order_by(Post.id).all())
     for p in posts:
         started = p.container_created_at or p.created_at
         age = now - started
@@ -323,6 +368,18 @@ def reconcile_uncertain(session, now=None, client_factory=None) -> dict:
         acc = session.get(OwnedChannels, p.owned_channel_id)
         video = session.get(videos, p.video_id)
         item = session.get(UploadQueue, p.queue_id) if p.queue_id else None
+        if p.status == "PENDING":
+            # crashed before a container existed → nothing can be on Instagram; plain retry
+            if item is None or item.status != "PUBLISHING" or p.ig_container_id:
+                continue
+            p.status, p.error_kind = "FAILED", "INTERRUPTED_BEFORE_CONTAINER"
+            p.error_message = f"publish interrupted before container creation ({age} ago)"
+            item.status, item.scheduled_for = "PENDING", now
+            item.error_message = "re-queued by reconcile (interrupted before container)"
+            session.commit()                # account counters untouched
+            log.warning("reconcile: post %s interrupted before container → item %s re-queued", p.id, item.id)
+            out["interrupted"] += 1
+            continue
         client = (client_factory or client_for)(acc)
         code, media = None, None
         try:

@@ -45,7 +45,9 @@ def publish_due(session, now=None, rng=None, **kw) -> list:
                 _dt.timedelta(seconds=rng.randint(60, 180))
             session.commit()
             continue
-        if outcome in ("PUBLISHED", "RETRY", "RETRY_SLOW", "UNCERTAIN", "PAUSED", "COPYRIGHT"):
+        if outcome == "R2_NOT_CONFIGURED":
+            break           # hosting is broken for everyone: do not burn through other items
+        if outcome in ("PUBLISHED", "RETRY", "RETRY_SLOW", "UNCERTAIN", "PAUSED", "COPYRIGHT", "INTERRUPTED"):
             break           # the gap now applies to everyone
     return outcomes
 
@@ -73,9 +75,30 @@ def tick(session, now=None):
         pass
 
 
+STUCK_PUBLISHING = _dt.timedelta(hours=2)
+
+
+def alert_stuck_publishing(session, now=None) -> list:
+    """Queue items still PUBLISHING for > 2 h need a human (reconcile could not settle them)."""
+    from alerts import raise_alert
+    from models import Post
+    now = now or utcnow()
+    stuck = []
+    for item in session.query(UploadQueue).filter_by(status="PUBLISHING").all():
+        p = session.get(Post, item.post_id) if item.post_id else None
+        since = (p.created_at if p else None) or item.scheduled_for
+        if since and now - since > STUCK_PUBLISHING:
+            stuck.append(item.id)
+            raise_alert("PUBLISH_STUCK", f"Queue item {item.id} (account {item.owned_channel_id}, video "
+                        f"{item.video_id}) has been PUBLISHING since {since:%Y-%m-%d %H:%M} UTC — check the "
+                        "account manually", severity="CRITICAL", account_id=item.owned_channel_id, session=session)
+    return stuck
+
+
 def startup_reconcile(session, now=None, **kw) -> dict:
-    """Settle posts left CONTAINER / UNKNOWN (e.g. by a crash) before publishing anything again."""
+    """Settle posts left PENDING / CONTAINER / UNKNOWN (e.g. by a crash) before publishing again."""
     out = publisher.reconcile_uncertain(session, now, **kw)
+    out["stuck_alerts"] = alert_stuck_publishing(session, now)
     jobs.mark("reconcile_uncertain", now, session)
     log.info("start-up reconcile: %s", out)
     return out
